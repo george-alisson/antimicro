@@ -883,7 +883,6 @@ void JoyButton::activateSlots()
                                 lastKeyRepeatRate = tempcode;
                                 lastKeyRepeatPressTime = getRepeatKeyPressTime();
                                 lastKeyRepeatReleaseTimer.start(lastKeyRepeatPressTime);
-                                getPreferredKeyPressTime();
                                 //exit = true;
                             }
                             slotiter->next();
