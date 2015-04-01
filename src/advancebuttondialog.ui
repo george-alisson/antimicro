@@ -244,6 +244,11 @@
                <string>Set Change</string>
               </property>
              </item>
+             <item>
+              <property name="text">
+               <string>Repeat Last</string>
+              </property>
+             </item>
             </widget>
            </item>
            <item>

@@ -24,7 +24,7 @@ private:
 
     enum SlotTypeComboIndex {
         KBMouseSlot = 0, CycleSlot, DelaySlot, DistanceSlot, HoldSlot,
-        LoadSlot, MouseModSlot, PauseSlot, PressTimeSlot, ReleaseSlot, SetChangeSlot
+        LoadSlot, MouseModSlot, PauseSlot, PressTimeSlot, ReleaseSlot, SetChangeSlot, RepeatLastSlot
     };
 
 protected:
@@ -77,6 +77,7 @@ private slots:
     void insertKeyPressSlot();
     void insertDelaySlot();
     void insertSetChangeSlot();
+    void insertRepeatLastSlot();
 
     void updateActionTimeLabel();
     void updateSetSelection();

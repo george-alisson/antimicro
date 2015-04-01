@@ -249,6 +249,7 @@ protected:
     void checkForPressedSetChange();
     bool insertAssignedSlot(JoyButtonSlot *newSlot);
     unsigned int getPreferredKeyPressTime();
+    int getRepeatKeyPressTime();
     void checkTurboCondition(JoyButtonSlot *slot);
 
     QString buildActiveZoneSummary(QList<JoyButtonSlot*> &tempList);
@@ -270,6 +271,8 @@ protected:
     // Used to denote the SDL index of the actual joypad button
     int index;
     int turboInterval;
+    int lastKeyRepeatRate;
+    int lastKeyRepeatPressTime;
 
     QTimer turboTimer;
     QTimer pauseTimer;
@@ -284,6 +287,8 @@ protected:
     QTimer delayTimer;
     QTimer keyRepeatTimer;
     QTimer slotSetChangeTimer;
+    QTimer lastKeyRepeatPressTimer;
+    QTimer lastKeyRepeatReleaseTimer;
     static QTimer staticMouseEventTimer;
 
     bool isDown;
@@ -315,6 +320,7 @@ protected:
     JoyButtonSlot *currentKeyPress;
     JoyButtonSlot *currentDelay;
     JoyButtonSlot *currentSetChangeSlot;
+    JoyButtonSlot *currentKeyRepeat;
 
     bool ignoresets;
     QTime buttonHold;
@@ -477,6 +483,8 @@ private slots:
     void holdEvent();
     void delayEvent();
     void repeatKeysEvent();
+    void lastKeyRepeatKeysPressEvent();
+    void lastKeyRepeatKeysReleaseEvent();
 
     void pauseWaitEvent();
     void checkForSetChange();

@@ -243,6 +243,10 @@ void JoyButtonSlot::readConfig(QXmlStreamReader *xml)
                 {
                     this->setSlotMode(JoySetChange);
                 }
+                else if (temptext == "repeatlast")
+                {
+                    this->setSlotMode(JoyRepeatLast);
+                }
             }
             else
             {
@@ -382,6 +386,10 @@ void JoyButtonSlot::writeConfig(QXmlStreamWriter *xml)
     else if (mode == JoySetChange)
     {
         xml->writeCharacters("setchange");
+    }
+    else if (mode == JoyRepeatLast)
+    {
+        xml->writeCharacters("repeatlast");
     }
 
     xml->writeEndElement();
@@ -551,6 +559,22 @@ QString JoyButtonSlot::getSlotString()
         else if (mode == JoySetChange)
         {
             newlabel.append(tr("Set Change %1").arg(deviceCode+1));
+        }
+        else if (mode == JoyRepeatLast)
+        {
+            int minutes = deviceCode / 1000 / 60;
+            int seconds = (deviceCode / 1000 % 60);
+            int hundredths = deviceCode % 1000 / 10;
+
+            newlabel.append(tr("Repeat Last")).append(" ");
+            if (minutes > 0)
+            {
+                newlabel.append(QString("%1:").arg(minutes, 2, 10, QChar('0')));
+            }
+
+            newlabel.append(QString("%1.%2")
+                    .arg(seconds, 2, 10, QChar('0'))
+                    .arg(hundredths, 2, 10, QChar('0')));
         }
     }
     else

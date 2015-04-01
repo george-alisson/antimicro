@@ -365,6 +365,10 @@ void AdvanceButtonDialog::insertSlot()
     {
         insertSetChangeSlot();
     }
+    else if (slotTypeIndex == RepeatLastSlot)
+    {
+        insertRepeatLastSlot();
+    }
 
     /*if (current != (count - 1))
     {
@@ -386,6 +390,22 @@ void AdvanceButtonDialog::insertSlot()
         updateSlotsScrollArea(0);
     }
     */
+}
+
+void AdvanceButtonDialog::insertRepeatLastSlot()
+{
+    int index = ui->slotListWidget->currentRow();
+    SimpleKeyGrabberButton *tempbutton = ui->slotListWidget->currentItem()->data(Qt::UserRole).value<SimpleKeyGrabberButton*>();
+    int actionTime = actionTimeConvert();
+    if (actionTime >= 0)
+    {
+        tempbutton->setValue(actionTime, JoyButtonSlot::JoyRepeatLast);
+        // Stop all events on JoyButton
+        this->button->eventReset();
+
+        this->button->setAssignedSlot(actionTime, 0, index, JoyButtonSlot::JoyRepeatLast);
+        updateSlotsScrollArea(actionTime);
+    }
 }
 
 void AdvanceButtonDialog::insertPauseSlot()
@@ -870,6 +890,11 @@ void AdvanceButtonDialog::performStatsWidgetRefresh(QListWidgetItem *item)
 
         connect(ui->slotSetChangeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(checkSlotSetChangeUpdate()));
     }
+    else if (slot->getSlotMode() == JoyButtonSlot::JoyRepeatLast)
+    {
+        ui->slotTypeComboBox->setCurrentIndex(RepeatLastSlot);
+        refreshTimeComboBoxes(slot);
+    }
     /*else
     {
         ui->slotTypeComboBox->setCurrentIndex(KBMouseSlot);
@@ -886,7 +911,8 @@ void AdvanceButtonDialog::checkSlotTimeUpdate()
         tempbuttonslot->getSlotMode() == JoyButtonSlot::JoyHold ||
         tempbuttonslot->getSlotMode() == JoyButtonSlot::JoyRelease ||
         tempbuttonslot->getSlotMode() == JoyButtonSlot::JoyKeyPress ||
-        tempbuttonslot->getSlotMode() == JoyButtonSlot::JoyDelay)
+        tempbuttonslot->getSlotMode() == JoyButtonSlot::JoyDelay ||
+        tempbuttonslot->getSlotMode() == JoyButtonSlot::JoyRepeatLast)
     {
         int actionTime = actionTimeConvert();
         if (actionTime > 0)
@@ -1260,6 +1286,10 @@ void AdvanceButtonDialog::changeSlotTypeDisplay(int index)
     {
         ui->slotControlsStackedWidget->setCurrentIndex(5);
     }
+    else if (index == RepeatLastSlot)
+    {
+        ui->slotControlsStackedWidget->setCurrentIndex(0);
+    }
 }
 
 void AdvanceButtonDialog::changeSlotHelpText(int index)
@@ -1321,5 +1351,10 @@ void AdvanceButtonDialog::changeSlotHelpText(int index)
     else if (index == SetChangeSlot)
     {
         ui->slotTypeHelpLabel->setText(tr("Change to selected set once slot is activated."));
+    }
+    else if (index == RepeatLastSlot)
+    {
+        ui->slotTypeHelpLabel->setText(tr("Repeat last key pressed within a certain delay. "
+                                          "The key will be fired once per specified time."));
     }
 }
