@@ -111,8 +111,7 @@ JoyButton::JoyButton(int index, int originset, SetJoystick *parentSet, QObject *
     connect(&setChangeTimer, SIGNAL(timeout()), this, SLOT(checkForSetChange()));
     connect(&keyRepeatTimer, SIGNAL(timeout()), this, SLOT(repeatKeysEvent()));
     connect(&slotSetChangeTimer, SIGNAL(timeout()), this, SLOT(slotSetChange()));
-    connect(&lastKeyRepeatPressTimer, SIGNAL(timeout()), this, SLOT(lastKeyRepeatKeysPressEvent()));
-    connect(&lastKeyRepeatReleaseTimer, SIGNAL(timeout()), this, SLOT(lastKeyRepeatKeysReleaseEvent()));
+    connect(&lastKeyRepeatTimer, SIGNAL(timeout()), this, SLOT(lastKeyRepeatKeysPressEvent()));
 
     establishMouseTimerConnections();
 
@@ -437,7 +436,7 @@ void JoyButton::reset()
     delayTimer.stop();
     keyRepeatTimer.stop();
     slotSetChangeTimer.stop();
-    //lastKeyRepeatTimer.stop();
+    lastKeyRepeatTimer.stop();
 
     if (slotiter)
     {
@@ -863,32 +862,32 @@ void JoyButton::activateSlots()
                         slotiter->previous();
                         if (slotiter->hasPrevious())
                         {
-                            // ~When a new key is set to repeat, keep the old one pressed
-                            if (currentKeyRepeat)
+                            // When a new key is set to repeat, keep the old one pressed
+                            /*if (currentKeyRepeat)
                             {
-                                lastKeyRepeatReleaseTimer.stop();
-                                lastKeyRepeatPressTimer.stop();
+                                lastKeyRepeatTimer.stop();
                                 sendevent(currentKeyRepeat);
-                            }
+                            }*/
                             currentKeyRepeat = slotiter->previous();
-                            //currentKeyRepeat = lastActiveKey; // ~This could take the wrong key
-                            // ~Maybe this check for mouse buttons could slow down this slot, so it's up to you
-                            if (currentKeyRepeat->getSlotMode() == JoyButtonSlot::JoyKeyboard ||
-                                (currentKeyRepeat->getSlotMode() == JoyButtonSlot::JoyMouseButton &&
-                                 !(currentKeyRepeat->getSlotCode() == JoyButtonSlot::MouseWheelUp ||
-                                   currentKeyRepeat->getSlotCode() == JoyButtonSlot::MouseWheelDown ||
-                                   currentKeyRepeat->getSlotCode() == JoyButtonSlot::MouseWheelLeft ||
-                                   currentKeyRepeat->getSlotCode() == JoyButtonSlot::MouseWheelRight)))
+                            int keyCode = currentKeyRepeat->getSlotCode();
+                            JoyButtonSlot::JoySlotInputAction mode = currentKeyRepeat->getSlotMode();
+                            if (mode == JoyButtonSlot::JoyKeyboard ||
+                                (mode == JoyButtonSlot::JoyMouseButton &&
+                                !(keyCode == JoyButtonSlot::MouseWheelUp ||
+                                keyCode == JoyButtonSlot::MouseWheelDown ||
+                                keyCode == JoyButtonSlot::MouseWheelLeft ||
+                                keyCode == JoyButtonSlot::MouseWheelRight)))
                             {
                                 lastKeyRepeatRate = tempcode;
-                                lastKeyRepeatPressTime = getRepeatKeyPressTime();
-                                lastKeyRepeatReleaseTimer.start(lastKeyRepeatPressTime);
-                                //exit = true;
+                                lastKeyRepeatPressTime = tempcode / 2; //getRepeatKeyPressTime();
+                                isRepeatReleased = false;
+                                lastKeyRepeatTimer.start(lastKeyRepeatPressTime);
                             }
                             slotiter->next();
                         }
                         slotiter->next();
                     }
+                    exit = true;
                 }
             }
         }
@@ -3105,7 +3104,7 @@ void JoyButton::releaseDeskEvent(bool skipsetchange)
     delayTimer.stop();
     keyRepeatTimer.stop();
     setChangeTimer.stop();
-    //lastKeyRepeatTimer.stop();
+    lastKeyRepeatTimer.stop();
 
     releaseActiveSlots();
     if (!isButtonPressedQueue.isEmpty() && !currentRelease)
@@ -3370,7 +3369,7 @@ void JoyButton::clearSlotsEventReset(bool clearSignalEmit)
     keyPressTimer.stop();
     delayTimer.stop();
     keyRepeatTimer.stop();
-    //lastKeyRepeatTimer.stop();
+    lastKeyRepeatTimer.stop();
 
     if (slotiter)
     {
@@ -3419,7 +3418,7 @@ void JoyButton::eventReset()
     keyPressTimer.stop();
     delayTimer.stop();
     keyRepeatTimer.stop();
-    //lastKeyRepeatTimer.stop();
+    lastKeyRepeatTimer.stop();
 
     if (slotiter)
     {
@@ -3668,9 +3667,8 @@ void JoyButton::releaseActiveSlots()
 
         if (currentKeyRepeat)
         {
-            lastKeyRepeatReleaseTimer.stop();
-            lastKeyRepeatPressTimer.stop();
-            sendevent(currentKeyRepeat, false);
+            lastKeyRepeatTimer.stop();
+            if (!isRepeatReleased) sendevent(currentKeyRepeat, false);
             currentKeyRepeat = 0;
         }
 
@@ -4568,22 +4566,15 @@ void JoyButton::lastKeyRepeatKeysPressEvent()
 {
     if (isButtonPressed)
     {
-        sendevent(currentKeyRepeat, true);
+        sendevent(currentKeyRepeat, isRepeatReleased);
 
-        lastKeyRepeatReleaseTimer.start(lastKeyRepeatPressTime);
+        isRepeatReleased = !isRepeatReleased;
+
+        lastKeyRepeatTimer.stop();
+        lastKeyRepeatTimer.start(!isRepeatReleased ? lastKeyRepeatPressTime
+                                                  : lastKeyRepeatRate - lastKeyRepeatPressTime);
     }
-    lastKeyRepeatPressTimer.stop();
-}
-
-void JoyButton::lastKeyRepeatKeysReleaseEvent()
-{
-    if (isButtonPressed)
-    {
-        sendevent(currentKeyRepeat, false);
-
-        lastKeyRepeatPressTimer.start(lastKeyRepeatRate - lastKeyRepeatPressTime);
-    }
-    lastKeyRepeatReleaseTimer.stop();
+    else lastKeyRepeatTimer.stop();
 }
 
 void JoyButton::establishPropertyUpdatedConnections()

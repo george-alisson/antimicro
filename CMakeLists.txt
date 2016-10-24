@@ -32,6 +32,8 @@ option(UPDATE_TRANSLATIONS "Call lupdate to update translation files from source
 if(WIN32)
     option(PORTABLE_PACKAGE "Create portable Windows package" OFF)
     option(TARGET_ARCH "Choose which version of some libraries to use. (x86, x86_64)" "x86")
+    set(TARGET_ARCH "x86")
+    set(PORTABLE_PACKAGE ON)
 
     if(PORTABLE_PACKAGE)
         add_definitions(-DWIN_PORTABLE_PACKAGE)

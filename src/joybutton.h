@@ -271,6 +271,8 @@ protected:
     // Used to denote the SDL index of the actual joypad button
     int index;
     int turboInterval;
+
+    bool isRepeatReleased;
     int lastKeyRepeatRate;
     int lastKeyRepeatPressTime;
 
@@ -287,8 +289,7 @@ protected:
     QTimer delayTimer;
     QTimer keyRepeatTimer;
     QTimer slotSetChangeTimer;
-    QTimer lastKeyRepeatPressTimer;
-    QTimer lastKeyRepeatReleaseTimer;
+    QTimer lastKeyRepeatTimer;
     static QTimer staticMouseEventTimer;
 
     bool isDown;
@@ -484,7 +485,6 @@ private slots:
     void delayEvent();
     void repeatKeysEvent();
     void lastKeyRepeatKeysPressEvent();
-    void lastKeyRepeatKeysReleaseEvent();
 
     void pauseWaitEvent();
     void checkForSetChange();
