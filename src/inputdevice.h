@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #ifndef INPUTDEVICE_H
 #define INPUTDEVICE_H
 
@@ -5,6 +22,7 @@
 #include <QList>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QRegExp>
 
 #ifdef USE_SDL_2
 #include <SDL2/SDL_joystick.h>
@@ -42,8 +60,11 @@ public:
 
     virtual QString getName() = 0;
     virtual QString getSDLName() = 0;
+
     // GUID only available on SDL 2.
     virtual QString getGUIDString() = 0;
+    virtual QString getRawGUIDString();
+
     virtual QString getStringIdentifier();
     virtual QString getXmlName() = 0;
     virtual void closeSDLDevice() = 0;
@@ -64,9 +85,6 @@ public:
     void setStickName(int stickIndex, QString tempName);
     void setDPadName(int dpadIndex, QString tempName);
     void setVDPadName(int vdpadIndex, QString tempName);
-
-    virtual void readConfig(QXmlStreamReader *xml);
-    virtual void writeConfig(QXmlStreamWriter *xml);
 
     virtual int getNumberRawButtons() = 0;
     virtual int getNumberRawAxes() = 0;
@@ -90,23 +108,35 @@ public:
     bool hasCalibrationThrottle(int axisNum);
     JoyAxis::ThrottleTypes getCalibrationThrottle(int axisNum);
     void setCalibrationThrottle(int axisNum, JoyAxis::ThrottleTypes throttle);
+    void setCalibrationStatus(int axisNum, JoyAxis::ThrottleTypes throttle);
+    void removeCalibrationStatus(int axisNum);
 
     void sendLoadProfileRequest(QString location);
     AntiMicroSettings *getSettings();
 
-    void transferReset();
-    void reInitButtons();
-
+    void activatePossiblePendingEvents();
     void activatePossibleControlStickEvents();
+    void activatePossibleAxisEvents();
+    void activatePossibleDPadEvents();
     void activatePossibleVDPadEvents();
+    void activatePossibleButtonEvents();
+
+    bool isEmptyGUID(QString tempGUID);
+    bool isRelevantGUID(QString tempGUID);
+
+    void setRawAxisDeadZone(int deadZone);
+    int getRawAxisDeadZone();
+    void rawAxisEvent(int index, int value);
 
     static const int NUMBER_JOYSETS;
     static const int DEFAULTKEYPRESSTIME;
     static const unsigned int DEFAULTKEYREPEATDELAY;
     static const unsigned int DEFAULTKEYREPEATRATE;
+    static const int RAISEDDEADZONE;
 
 protected:
     void enableSetConnections(SetJoystick *setstick);
+    bool elementsHaveNames();
 
     SDL_Joystick* joyhandle;
     QHash<int, SetJoystick*> joystick_sets;
@@ -128,6 +158,10 @@ protected:
     QList<int> axesstates;
     QList<int> dpadstates;
 
+    int rawAxisDeadZone;
+
+    static QRegExp emptyGUID;
+
 signals:
     void setChangeActivated(int index);
     void setAxisThrottleActivated(int index);
@@ -142,13 +176,17 @@ signals:
     void rawDPadButtonRelease(int dpad, int buttonindex);
     void rawAxisActivated(int axis, int value);
     void rawAxisReleased(int axis, int value);
+    void rawAxisMoved(int axis, int value);
     void profileUpdated();
     void propertyUpdated();
     void profileNameEdited(QString text);
     void requestProfileLoad(QString location);
+    void requestWait();
 
 public slots:
     void reset();
+    void transferReset();
+    void reInitButtons();
     void resetButtonDownCount();
     void setActiveSetNumber(int index);
     void changeSetButtonAssociation(int button_index, int originset, int newset, int mode);
@@ -159,6 +197,11 @@ public slots:
     void setDeviceKeyPressTime(unsigned int newPressTime);
     void profileEdited();
     void setProfileName(QString value);
+    void haltServices();
+    void finalRemoval();
+
+    virtual void readConfig(QXmlStreamReader *xml);
+    virtual void writeConfig(QXmlStreamWriter *xml);
 
     void establishPropertyUpdatedConnection();
     void disconnectPropertyUpdatedConnection();
@@ -194,5 +237,6 @@ protected slots:
 };
 
 Q_DECLARE_METATYPE(InputDevice*)
+Q_DECLARE_METATYPE(SDL_JoystickID)
 
 #endif // INPUTDEVICE_H

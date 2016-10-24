@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 #include <QProgressBar>
 #include <QVBoxLayout>
@@ -19,6 +36,8 @@ JoystickStatusWindow::JoystickStatusWindow(InputDevice *joystick, QWidget *paren
     setAttribute(Qt::WA_DeleteOnClose);
 
     this->joystick = joystick;
+
+    PadderCommon::inputDaemonMutex.lock();
 
     setWindowTitle(tr("%1 (#%2) Properties").arg(joystick->getSDLName())
                    .arg(joystick->getRealJoyNumber()));
@@ -62,7 +81,7 @@ JoystickStatusWindow::JoystickStatusWindow(InputDevice *joystick, QWidget *paren
     ui->axesScrollArea->setLayout(axesBox);
 
     QGridLayout *buttonsGrid = new QGridLayout();
-    buttonsGrid->setHorizontalSpacing(4);
+    buttonsGrid->setHorizontalSpacing(10);
     buttonsGrid->setVerticalSpacing(10);
 
     int currentRow = 0;
@@ -73,8 +92,9 @@ JoystickStatusWindow::JoystickStatusWindow(InputDevice *joystick, QWidget *paren
         if (button)
         {
             JoyButtonStatusBox *statusbox = new JoyButtonStatusBox(button);
-            statusbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-            statusbox->setMinimumSize(30, 30);
+            statusbox->setSizePolicy(QSizePolicy::Expanding,
+                                     QSizePolicy::Expanding);
+
             buttonsGrid->addWidget(statusbox, currentRow, currentColumn);
             currentColumn++;
             if (currentColumn >= 6)
@@ -148,6 +168,8 @@ JoystickStatusWindow::JoystickStatusWindow(InputDevice *joystick, QWidget *paren
     ui->sdlGameControllerLabel->setVisible(false);
 #endif
 
+    PadderCommon::inputDaemonMutex.unlock();
+
     connect(joystick, SIGNAL(destroyed()), this, SLOT(obliterate()));
     connect(this, SIGNAL(finished(int)), this, SLOT(restoreButtonStates(int)));
 }
@@ -161,8 +183,12 @@ void JoystickStatusWindow::restoreButtonStates(int code)
 {
     if (code == QDialogButtonBox::AcceptRole)
     {
+        PadderCommon::inputDaemonMutex.lock();
+
         joystick->getActiveSetJoystick()->setIgnoreEventState(false);
         joystick->getActiveSetJoystick()->release();
+
+        PadderCommon::inputDaemonMutex.unlock();
     }
 }
 

@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 #include <QHashIterator>
 
@@ -264,27 +281,38 @@ void SetJoystick::propogateSetVDPadButtonAssociation(int button, int dpad, int n
     }
 }
 
+/**
+ * @brief Perform a release of all elements of a set. Stick and vdpad
+ *     releases will be handled by the associated button or axis.
+ */
 void SetJoystick::release()
 {
-    QHashIterator<int, JoyButton*> iter(buttons);
-    while (iter.hasNext())
+    QHashIterator<int, JoyAxis*> iterAxes(axes);
+    while (iterAxes.hasNext())
     {
-        JoyButton *button = iter.next().value();
-        button->joyEvent(false, true);
-    }
-
-    QHashIterator<int, JoyAxis*> iter2(axes);
-    while (iter2.hasNext())
-    {
-        JoyAxis *axis = iter2.next().value();
+        JoyAxis *axis = iterAxes.next().value();
+        axis->clearPendingEvent();
         axis->joyEvent(axis->getCurrentThrottledDeadValue(), true);
+        axis->eventReset();
+
     }
 
-    QHashIterator<int, JoyDPad*> iter3(hats);
-    while (iter3.hasNext())
+    QHashIterator<int, JoyDPad*> iterDPads(hats);
+    while (iterDPads.hasNext())
     {
-        JoyDPad *dpad = iter3.next().value();
+        JoyDPad *dpad = iterDPads.next().value();
+        dpad->clearPendingEvent();
         dpad->joyEvent(0, true);
+        dpad->eventReset();
+    }
+
+    QHashIterator<int, JoyButton*> iterButtons(buttons);
+    while (iterButtons.hasNext())
+    {
+        JoyButton *button = iterButtons.next().value();
+        button->clearPendingEvent();
+        button->joyEvent(false, true);
+        button->eventReset();
     }
 }
 
@@ -639,7 +667,7 @@ void SetJoystick::propogateSetStickButtonClick(int button)
     if (stickButton)
     {
         JoyControlStick *stick = stickButton->getStick();
-        if (!stickButton->getIgnoreEventState())
+        if (stick && !stickButton->getIgnoreEventState())
         {
             emit setStickButtonClick(index, stick->getIndex(), button);
         }
@@ -665,7 +693,8 @@ void SetJoystick::propogateSetDPadButtonClick(int button)
     if (dpadButton)
     {
         JoyDPad *dpad = dpadButton->getDPad();
-        if (!dpadButton->getIgnoreEventState())
+        if (dpad && dpadButton->getButtonState() &&
+            !dpadButton->getIgnoreEventState())
         {
             emit setDPadButtonClick(index, dpad->getIndex(), button);
         }
@@ -678,7 +707,8 @@ void SetJoystick::propogateSetDPadButtonRelease(int button)
     if (dpadButton)
     {
         JoyDPad *dpad = dpadButton->getDPad();
-        if (!dpadButton->getIgnoreEventState())
+        if (dpad && !dpadButton->getButtonState() &&
+            !dpadButton->getIgnoreEventState())
         {
             emit setDPadButtonRelease(index, dpad->getIndex(), button);
         }
@@ -1032,16 +1062,6 @@ void SetJoystick::raiseAxesDeadZones(int deadZone)
         temp->setDeadZone(tempDeadZone);
         temp->establishPropertyUpdatedConnection();
     }
-
-    /*QHashIterator<int, JoyControlStick*> stickIter(sticks);
-    while (stickIter.hasNext())
-    {
-        JoyControlStick *temp = stickIter.next().value();
-        temp->disconnectPropertyUpdatedConnection();
-        temp->setDeadZone(20000);
-        temp->establishPropertyUpdatedConnection();
-    }
-    */
 }
 
 void SetJoystick::currentAxesDeadZones(QList<int> *axesDeadZones)

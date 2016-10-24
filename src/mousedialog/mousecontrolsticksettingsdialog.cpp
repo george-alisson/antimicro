@@ -1,35 +1,56 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <QHashIterator>
 
 #include "mousecontrolsticksettingsdialog.h"
 #include "ui_mousesettingsdialog.h"
 
+#include <QSpinBox>
+#include <QComboBox>
+
 #include <inputdevice.h>
 #include <setjoystick.h>
 
 MouseControlStickSettingsDialog::MouseControlStickSettingsDialog(JoyControlStick *stick, QWidget *parent) :
-    MouseSettingsDialog(parent)
+    MouseSettingsDialog(parent),
+    helper(stick)
 {
     setAttribute(Qt::WA_DeleteOnClose);
 
     this->stick = stick;
+    helper.moveToThread(stick->thread());
 
     calculateMouseSpeedPreset();
     selectCurrentMouseModePreset();
     calculateSpringPreset();
-    changeSpringSectionStatus(ui->mouseModeComboBox->currentIndex());
-    changeSettingsWidgetStatus(ui->accelerationComboBox->currentIndex());
+
     if (stick->getButtonsPresetSensitivity() > 0.0)
     {
         ui->sensitivityDoubleSpinBox->setValue(stick->getButtonsPresetSensitivity());
     }
     updateAccelerationCurvePresetComboBox();
-    //selectSmoothingPreset();
 
     updateWindowTitleStickName();
 
     if (ui->mouseModeComboBox->currentIndex() == 2)
     {
-        springPreviewWidget = new SpringModeRegionPreview(ui->springWidthSpinBox->value(), ui->springHeightSpinBox->value());
+        springPreviewWidget = new SpringModeRegionPreview(ui->springWidthSpinBox->value(),
+                                                          ui->springHeightSpinBox->value());
     }
     else
     {
@@ -51,6 +72,12 @@ MouseControlStickSettingsDialog::MouseControlStickSettingsDialog(JoyControlStick
     calculateStartAccelerationMultiplier();
     calculateMinAccelerationThreshold();
     calculateMaxAccelerationThreshold();
+    calculateAccelExtraDuration();
+    calculateReleaseSpringRadius();
+    calculateExtraAccelerationCurve();
+
+    changeSpringSectionStatus(ui->mouseModeComboBox->currentIndex());
+    changeSettingsWidgetStatus(ui->accelerationComboBox->currentIndex());
 
     connect(this, SIGNAL(finished(int)), springPreviewWidget, SLOT(deleteLater()));
 
@@ -69,19 +96,21 @@ MouseControlStickSettingsDialog::MouseControlStickSettingsDialog(JoyControlStick
     connect(ui->relativeSpringCheckBox, SIGNAL(clicked(bool)), this, SLOT(updateSpringRelativeStatus(bool)));
 
     connect(ui->sensitivityDoubleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(updateSensitivity(double)));
-    //connect(ui->smoothingCheckBox, SIGNAL(clicked(bool)), this, SLOT(updateSmoothingSetting(bool)));
 
     connect(ui->wheelHoriSpeedSpinBox, SIGNAL(valueChanged(int)), this, SLOT(updateWheelSpeedHorizontalSpeed(int)));
     connect(ui->wheelVertSpeedSpinBox, SIGNAL(valueChanged(int)), this, SLOT(updateWheelSpeedVerticalSpeed(int)));
 
     connect(ui->easingDoubleSpinBox, SIGNAL(valueChanged(double)), stick, SLOT(setButtonsEasingDuration(double)));
 
-    connect(ui->extraAccelerationGroupBox, SIGNAL(clicked(bool)), this, SLOT(updateExtraAccelerationStatus(bool)));
-    //connect(ui->extraAccelCheckBox, SIGNAL(clicked(bool)), this, SLOT(updateExtraAccelerationStatus(bool)));
-    connect(ui->extraAccelDoubleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(updateExtraAccelerationMultiplier(double)));
-    connect(ui->minMultiDoubleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(updateStartMultiPercentage(double)));
-    connect(ui->minThresholdDoubleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(updateMinAccelThreshold(double)));
-    connect(ui->maxThresholdDoubleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(updateMaxAccelThreshold(double)));
+    connect(ui->extraAccelerationGroupBox, SIGNAL(clicked(bool)), &helper, SLOT(updateExtraAccelerationStatus(bool)));
+    connect(ui->extraAccelDoubleSpinBox, SIGNAL(valueChanged(double)), &helper, SLOT(updateExtraAccelerationMultiplier(double)));
+    connect(ui->minMultiDoubleSpinBox, SIGNAL(valueChanged(double)), &helper, SLOT(updateStartMultiPercentage(double)));
+    connect(ui->minThresholdDoubleSpinBox, SIGNAL(valueChanged(double)), &helper, SLOT(updateMinAccelThreshold(double)));
+    connect(ui->maxThresholdDoubleSpinBox, SIGNAL(valueChanged(double)), &helper, SLOT(updateMaxAccelThreshold(double)));
+    connect(ui->accelExtraDurationDoubleSpinBox, SIGNAL(valueChanged(double)), &helper, SLOT(updateAccelExtraDuration(double)));
+    connect(ui->releaseSpringRadiusspinBox, SIGNAL(valueChanged(int)), &helper, SLOT(updateReleaseSpringRadius(int)));
+
+    connect(ui->extraAccelCurveComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(updateExtraAccelerationCurve(int)));
 }
 
 void MouseControlStickSettingsDialog::changeMouseMode(int index)
@@ -212,26 +241,6 @@ void MouseControlStickSettingsDialog::updateAccelerationCurvePresetComboBox()
     MouseSettingsDialog::updateAccelerationCurvePresetComboBox(temp);
 }
 
-/*void MouseControlStickSettingsDialog::updateSmoothingSetting(bool clicked)
-{
-    stick->setButtonsSmoothing(clicked);
-}
-*/
-
-/*void MouseControlStickSettingsDialog::selectSmoothingPreset()
-{
-    bool smoothing = stick->getButtonsPresetSmoothing();
-    if (smoothing)
-    {
-        ui->smoothingCheckBox->setChecked(true);
-    }
-    else
-    {
-        ui->smoothingCheckBox->setChecked(false);
-    }
-}
-*/
-
 void MouseControlStickSettingsDialog::calculateWheelSpeedPreset()
 {
     QHashIterator<JoyControlStick::JoyStickDirections, JoyControlStickButton*> iter(*stick->getButtons());
@@ -299,8 +308,6 @@ void MouseControlStickSettingsDialog::calculateExtraAccelrationStatus()
     if (stick->getButtonsExtraAccelerationStatus())
     {
         ui->extraAccelerationGroupBox->setChecked(true);
-        //ui->extraAccelCheckBox->setChecked(true);
-        //ui->extraAccelDoubleSpinBox->setEnabled(true);
     }
 }
 
@@ -324,27 +331,36 @@ void MouseControlStickSettingsDialog::calculateMaxAccelerationThreshold()
     ui->maxThresholdDoubleSpinBox->setValue(stick->getButtonsMaxAccelerationThreshold());
 }
 
-void MouseControlStickSettingsDialog::updateExtraAccelerationStatus(bool checked)
+void MouseControlStickSettingsDialog::calculateAccelExtraDuration()
 {
-    stick->setButtonsExtraAccelerationStatus(checked);
+    ui->accelExtraDurationDoubleSpinBox->setValue(stick->getButtonsAccelerationEasingDuration());
 }
 
-void MouseControlStickSettingsDialog::updateExtraAccelerationMultiplier(double value)
+void MouseControlStickSettingsDialog::calculateReleaseSpringRadius()
 {
-    stick->setButtonsExtraAccelerationMultiplier(value);
+    ui->releaseSpringRadiusspinBox->setValue(stick->getButtonsSpringDeadCircleMultiplier());
 }
 
-void MouseControlStickSettingsDialog::updateStartMultiPercentage(double value)
+void MouseControlStickSettingsDialog::calculateExtraAccelerationCurve()
 {
-    stick->setButtonsStartAccelerationMultiplier(value);
+    JoyButton::JoyExtraAccelerationCurve curve = stick->getButtonsExtraAccelerationCurve();
+    updateExtraAccelerationCurvePresetComboBox(curve);
 }
 
-void MouseControlStickSettingsDialog::updateMinAccelThreshold(double value)
+void MouseControlStickSettingsDialog::updateExtraAccelerationCurve(int index)
 {
-    stick->setButtonsMinAccelerationThreshold(value);
-}
+    JoyButton::JoyExtraAccelerationCurve temp = getExtraAccelCurveForIndex(index);
+    if (index > 0)
+    {
+        //PadderCommon::lockInputDevices();
 
-void MouseControlStickSettingsDialog::updateMaxAccelThreshold(double value)
-{
-    stick->setButtonsMaxAccelerationThreshold(value);
+        //InputDevice *device = stick->getParentSet()->getInputDevice();
+        //QMetaObject::invokeMethod(device, "haltServices", Qt::BlockingQueuedConnection);
+
+        PadderCommon::inputDaemonMutex.lock();
+        stick->setButtonsExtraAccelCurve(temp);
+        PadderCommon::inputDaemonMutex.unlock();
+
+        //PadderCommon::unlockInputDevices();
+    }
 }

@@ -36,7 +36,7 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="spacing">
-    <number>-1</number>
+    <number>6</number>
    </property>
    <property name="topMargin">
     <number>4</number>
@@ -102,7 +102,7 @@
        <widget class="QWidget" name="page">
         <layout class="QVBoxLayout" name="verticalLayout_9">
          <item>
-          <widget class="QListWidget" name="slotListWidget">
+          <widget class="SlotItemListWidget" name="slotListWidget">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
              <horstretch>0</horstretch>
@@ -211,6 +211,11 @@
              </item>
              <item>
               <property name="text">
+               <string>Execute</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
                <string>Hold</string>
               </property>
              </item>
@@ -239,7 +244,7 @@
                <string>Release</string>
               </property>
              </item>
-			 <item>
+             <item>
               <property name="text">
                <string>Repeat Last</string>
               </property>
@@ -247,6 +252,11 @@
              <item>
               <property name="text">
                <string>Set Change</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Text Entry</string>
               </property>
              </item>
             </widget>
@@ -504,7 +514,7 @@
                   <string/>
                  </property>
                  <property name="text">
-                  <string>Mouse Speed Mod:</string>
+                  <string>&amp;Mouse Speed Mod:</string>
                  </property>
                  <property name="buddy">
                   <cstring>mouseSpeedModSpinBox</cstring>
@@ -629,6 +639,9 @@
                  <property name="maximum">
                   <double>60.000000000000000</double>
                  </property>
+                 <property name="singleStep">
+                  <double>0.500000000000000</double>
+                 </property>
                  <property name="value">
                   <double>1.000000000000000</double>
                  </property>
@@ -669,6 +682,56 @@
             <layout class="QVBoxLayout" name="verticalLayout_15">
              <item>
               <widget class="QComboBox" name="slotSetChangeComboBox"/>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="textEntryPage">
+            <layout class="QVBoxLayout" name="verticalLayout_17">
+             <item>
+              <widget class="QLineEdit" name="textEntryLineEdit"/>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="execPage">
+            <layout class="QVBoxLayout" name="verticalLayout_19">
+             <item>
+              <layout class="QVBoxLayout" name="verticalLayout_18">
+               <item>
+                <layout class="QHBoxLayout" name="horizontalLayout_13">
+                 <item>
+                  <widget class="QLabel" name="label_4">
+                   <property name="text">
+                    <string>Executable:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="execLineEdit"/>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="execToolButton">
+                   <property name="text">
+                    <string>...</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="horizontalLayout_12">
+                 <item>
+                  <widget class="QLabel" name="label_2">
+                   <property name="text">
+                    <string>Arguments:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="execArgumentsLineEdit"/>
+                 </item>
+                </layout>
+               </item>
+              </layout>
              </item>
             </layout>
            </widget>
@@ -828,7 +891,7 @@
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_3">
            <property name="spacing">
-            <number>-1</number>
+            <number>6</number>
            </property>
            <property name="topMargin">
             <number>0</number>
@@ -1161,6 +1224,13 @@
   <zorder>line</zorder>
   <zorder></zorder>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>SlotItemListWidget</class>
+   <extends>QListWidget</extends>
+   <header>slotitemlistwidget.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections>
   <connection>

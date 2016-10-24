@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "joydpadbutton.h"
 #include "joydpad.h"
 #include "event.h"
@@ -102,19 +119,19 @@ void JoyDPadButton::reset(int index)
 
 void JoyDPadButton::setChangeSetCondition(SetChangeCondition condition, bool passive)
 {
+    SetChangeCondition oldCondition = setSelectionCondition;
+
     if (condition != setSelectionCondition && !passive)
     {
         if (condition == SetChangeWhileHeld || condition == SetChangeTwoWay)
         {
             // Set new condition
             emit setAssignmentChanged(index, this->dpad->getJoyNumber(), setSelection, condition);
-            //emit setAssignmentChanged(index, setSelection, condition);
         }
         else if (setSelectionCondition == SetChangeWhileHeld || setSelectionCondition == SetChangeTwoWay)
         {
             // Remove old condition
             emit setAssignmentChanged(index, this->dpad->getJoyNumber(), setSelection, SetChangeDisabled);
-            //emit setAssignmentChanged(index, setSelection, SetChangeDisabled);
         }
 
         setSelectionCondition = condition;
@@ -127,6 +144,12 @@ void JoyDPadButton::setChangeSetCondition(SetChangeCondition condition, bool pas
     if (setSelectionCondition == SetChangeDisabled)
     {
         setChangeSetSelection(-1);
+    }
+
+    if (setSelectionCondition != oldCondition)
+    {
+        buildActiveZoneSummaryString();
+        emit propertyUpdated();
     }
 }
 

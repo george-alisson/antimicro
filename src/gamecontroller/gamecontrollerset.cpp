@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 
 #include "gamecontrollerset.h"
@@ -38,7 +55,7 @@ void GameControllerSet::populateSticksDPad()
     JoyButton *buttonDown = getJoyButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN);
     JoyButton *buttonLeft = getJoyButton(SDL_CONTROLLER_BUTTON_DPAD_LEFT);
     JoyButton *buttonRight = getJoyButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
-    GameControllerDPad *controllerDPad = new GameControllerDPad(buttonUp, buttonDown, buttonLeft, buttonRight, 0, index, this);
+    GameControllerDPad *controllerDPad = new GameControllerDPad(buttonUp, buttonDown, buttonLeft, buttonRight, 0, index, this, this);
     controllerDPad->setDefaultDPadName("DPad");
     //controllerDPad->setDPadDelay(10);
     addVDPad(0, controllerDPad);
@@ -317,13 +334,13 @@ void GameControllerSet::refreshAxes()
         if (i == SDL_CONTROLLER_AXIS_TRIGGERLEFT ||
             i == SDL_CONTROLLER_AXIS_TRIGGERRIGHT)
         {
-            GameControllerTrigger *trigger = new GameControllerTrigger(i, index, this);
+            GameControllerTrigger *trigger = new GameControllerTrigger(i, index, this, this);
             axes.insert(i, trigger);
             enableAxisConnections(trigger);
         }
         else
         {
-            JoyAxis *axis = new JoyAxis(i, index, this);
+            JoyAxis *axis = new JoyAxis(i, index, this, this);
             axes.insert(i, axis);
             enableAxisConnections(axis);
         }

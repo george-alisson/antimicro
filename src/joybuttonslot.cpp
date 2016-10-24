@@ -1,19 +1,36 @@
-//#include <QDebug>
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+//#include <QDebug>
 #include <QFileInfo>
 
+#include "inputdevice.h"
 #include "joybuttonslot.h"
 
 #include "antkeymapper.h"
 #include "event.h"
-#include "inputdevice.h"
-
 
 const int JoyButtonSlot::JOYSPEED = 20;
 const QString JoyButtonSlot::xmlName = "slot";
+const int JoyButtonSlot::MAXTEXTENTRYDISPLAYLENGTH = 40;
 
 JoyButtonSlot::JoyButtonSlot(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    extraData()
 {
     deviceCode = 0;
     mode = JoyKeyboard;
@@ -24,7 +41,8 @@ JoyButtonSlot::JoyButtonSlot(QObject *parent) :
 }
 
 JoyButtonSlot::JoyButtonSlot(int code, JoySlotInputAction mode, QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    extraData()
 {
     deviceCode = 0;
     qkeyaliasCode = 0;
@@ -40,7 +58,8 @@ JoyButtonSlot::JoyButtonSlot(int code, JoySlotInputAction mode, QObject *parent)
 }
 
 JoyButtonSlot::JoyButtonSlot(int code, unsigned int alias, JoySlotInputAction mode, QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    extraData()
 {
     deviceCode = 0;
     qkeyaliasCode = 0;
@@ -61,7 +80,8 @@ JoyButtonSlot::JoyButtonSlot(int code, unsigned int alias, JoySlotInputAction mo
 }
 
 JoyButtonSlot::JoyButtonSlot(JoyButtonSlot *slot, QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    extraData()
 {
     deviceCode = slot->deviceCode;
     qkeyaliasCode = slot->qkeyaliasCode;
@@ -69,6 +89,24 @@ JoyButtonSlot::JoyButtonSlot(JoyButtonSlot *slot, QObject *parent) :
     distance = slot->distance;
     easingActive = false;
     textData = slot->getTextData();
+    extraData = slot->getExtraData();
+}
+
+JoyButtonSlot::JoyButtonSlot(QString text, JoySlotInputAction mode, QObject *parent) :
+    QObject(parent),
+    extraData()
+{
+    deviceCode = 0;
+    qkeyaliasCode = 0;
+    this->mode = mode;
+    distance = 0.0;
+    easingActive = false;
+    if (mode == JoyLoadProfile ||
+        mode == JoyTextEntry ||
+        mode == JoyExecute)
+    {
+        textData = text;
+    }
 }
 
 void JoyButtonSlot::setSlotCode(int code)
@@ -167,6 +205,8 @@ void JoyButtonSlot::readConfig(QXmlStreamReader *xml)
     if (xml->isStartElement() && xml->name() == "slot")
     {
         QString profile;
+        QString tempStringData;
+        QString extraStringData;
 
         xml->readNextStartElement();
         while (!xml->atEnd() && (!xml->isEndElement() && xml->name() != "slot"))
@@ -185,7 +225,21 @@ void JoyButtonSlot::readConfig(QXmlStreamReader *xml)
             {
                 QString temptext = xml->readElementText();
                 profile = temptext;
-                //this->setTextData(temptext);
+            }
+            else if (xml->name() == "text" && xml->isStartElement())
+            {
+                QString temptext = xml->readElementText();
+                tempStringData = temptext;
+            }
+            else if (xml->name() == "path" && xml->isStartElement())
+            {
+                QString temptext = xml->readElementText();
+                tempStringData = temptext;
+            }
+            else if (xml->name() == "arguments" && xml->isStartElement())
+            {
+                QString temptext = xml->readElementText();
+                extraStringData = temptext;
             }
             else if (xml->name() == "mode" && xml->isStartElement())
             {
@@ -243,6 +297,14 @@ void JoyButtonSlot::readConfig(QXmlStreamReader *xml)
                 {
                     this->setSlotMode(JoySetChange);
                 }
+                else if (temptext == "textentry")
+                {
+                    this->setSlotMode(JoyTextEntry);
+                }
+                else if (temptext == "execute")
+                {
+                    this->setSlotMode(JoyExecute);
+                }
                 else if (temptext == "repeatlast")
                 {
                     this->setSlotMode(JoyRepeatLast);
@@ -293,6 +355,22 @@ void JoyButtonSlot::readConfig(QXmlStreamReader *xml)
                 this->setSlotCode(-1);
             }
         }
+        else if (this->getSlotMode() == JoyTextEntry && !tempStringData.isEmpty())
+        {
+            this->setTextData(tempStringData);
+        }
+        else if (this->getSlotMode() == JoyExecute && !tempStringData.isEmpty())
+        {
+            QFileInfo tempFile(tempStringData);
+            if (tempFile.exists() && tempFile.isExecutable())
+            {
+                this->setTextData(tempStringData);
+                if (!extraStringData.isEmpty())
+                {
+                    this->setExtraData(QVariant(extraStringData));
+                }
+            }
+        }
     }
 }
 
@@ -328,6 +406,18 @@ void JoyButtonSlot::writeConfig(QXmlStreamWriter *xml)
     else if (mode == JoyLoadProfile && !textData.isEmpty())
     {
         xml->writeTextElement("profile", textData);
+    }
+    else if (mode == JoyTextEntry && !textData.isEmpty())
+    {
+        xml->writeTextElement("text", textData);
+    }
+    else if (mode == JoyExecute && !textData.isEmpty())
+    {
+        xml->writeTextElement("path", textData);
+        if (!extraData.isNull() && extraData.canConvert<QString>())
+        {
+            xml->writeTextElement("arguments", extraData.toString());
+        }
     }
     else
     {
@@ -387,6 +477,14 @@ void JoyButtonSlot::writeConfig(QXmlStreamWriter *xml)
     {
         xml->writeCharacters("setchange");
     }
+    else if (mode == JoyTextEntry)
+    {
+        xml->writeCharacters("textentry");
+    }
+    else if (mode == JoyExecute)
+    {
+        xml->writeCharacters("execute");
+    }
     else if (mode == JoyRepeatLast)
     {
         xml->writeCharacters("repeatlast");
@@ -410,7 +508,15 @@ QString JoyButtonSlot::getSlotString()
     {
         if (mode == JoyButtonSlot::JoyKeyboard)
         {
-            newlabel = newlabel.append(keysymToKeyString(deviceCode, qkeyaliasCode).toUpper());
+            unsigned int tempDeviceCode = deviceCode;
+#ifdef Q_OS_WIN
+            QtKeyMapperBase *nativeWinKeyMapper = AntKeyMapper::getInstance()->getNativeKeyMapper();
+            if (nativeWinKeyMapper)
+            {
+                tempDeviceCode = nativeWinKeyMapper->returnVirtualKey(qkeyaliasCode);
+            }
+#endif
+            newlabel = newlabel.append(keysymToKeyString(tempDeviceCode, qkeyaliasCode).toUpper());
         }
         else if (mode == JoyButtonSlot::JoyMouseButton)
         {
@@ -560,21 +666,45 @@ QString JoyButtonSlot::getSlotString()
         {
             newlabel.append(tr("Set Change %1").arg(deviceCode+1));
         }
+        else if (mode == JoyTextEntry)
+        {
+            QString temp = textData;
+            if (temp.length() > MAXTEXTENTRYDISPLAYLENGTH)
+            {
+                temp.truncate(MAXTEXTENTRYDISPLAYLENGTH - 3);
+                temp.append("...");
+            }
+            newlabel.append(tr("[Text] %1").arg(temp));
+        }
+        else if (mode == JoyExecute)
+        {
+            QString temp;
+            if (!textData.isEmpty())
+            {
+                QFileInfo tempFileInfo(textData);
+                temp.append(tempFileInfo.fileName());
+            }
+
+            newlabel.append(tr("[Exec] %1").arg(temp));
+        }
         else if (mode == JoyRepeatLast)
         {
             int minutes = deviceCode / 1000 / 60;
             int seconds = (deviceCode / 1000 % 60);
             int hundredths = deviceCode % 1000 / 10;
 
-            newlabel.append(tr("Repeat Last")).append(" ");
+            QString temp;
+            temp.append(tr("Repeat Last")).append(" ");
             if (minutes > 0)
             {
-                newlabel.append(QString("%1:").arg(minutes, 2, 10, QChar('0')));
+                temp.append(QString("%1:").arg(minutes, 2, 10, QChar('0')));
             }
 
-            newlabel.append(QString("%1.%2")
+            temp.append(QString("%1.%2")
                     .arg(seconds, 2, 10, QChar('0'))
                     .arg(hundredths, 2, 10, QChar('0')));
+
+            newlabel.append(temp);
         }
     }
     else
@@ -631,12 +761,24 @@ QString JoyButtonSlot::getTextData()
     return textData;
 }
 
+void JoyButtonSlot::setExtraData(QVariant data)
+{
+    this->extraData = data;
+}
+
+QVariant JoyButtonSlot::getExtraData()
+{
+    return extraData;
+}
+
 bool JoyButtonSlot::isValidSlot()
 {
     bool result = true;
     switch (mode)
     {
         case JoyLoadProfile:
+        case JoyTextEntry:
+        case JoyExecute:
         {
             if (textData.isEmpty())
             {

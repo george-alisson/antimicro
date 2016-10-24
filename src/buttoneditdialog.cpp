@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 #include <QtGlobal>
 
@@ -17,22 +34,15 @@
 
 #include "event.h"
 #include "antkeymapper.h"
-
-#ifdef Q_OS_UNIX
-    #include "eventhandlerfactory.h"
-
-    #if defined(WITH_UINPUT) && defined(WITH_X11)
-        #include "qtx11keymapper.h"
-
-        static QtX11KeyMapper x11KeyMapper;
-    #endif
-#endif
-
+#include "eventhandlerfactory.h"
 #include "setjoystick.h"
+#include "inputdevice.h"
+#include "common.h"
 
 ButtonEditDialog::ButtonEditDialog(JoyButton *button, QWidget *parent) :
     QDialog(parent, Qt::Window),
-    ui(new Ui::ButtonEditDialog)
+    ui(new Ui::ButtonEditDialog),
+    helper(button)
 {
     ui->setupUi(this);
 
@@ -41,16 +51,22 @@ ButtonEditDialog::ButtonEditDialog(JoyButton *button, QWidget *parent) :
 #endif
 
     setAttribute(Qt::WA_DeleteOnClose);
+    setWindowModality(Qt::WindowModal);
 
     ignoreRelease = false;
+
+    helper.moveToThread(button->thread());
+
+    PadderCommon::inputDaemonMutex.lock();
 
     this->button = button;
     ui->virtualKeyMouseTabWidget->hide();
     ui->virtualKeyMouseTabWidget->deleteLater();
     ui->virtualKeyMouseTabWidget = new VirtualKeyboardMouseWidget(button, this);
-    ui->virtualKeyMouseTabWidget->setFocus();
 
     ui->verticalLayout->insertWidget(1, ui->virtualKeyMouseTabWidget);
+    //ui->virtualKeyMouseTabWidget->setFocus();
+
     ui->slotSummaryLabel->setText(button->getSlotsString());
     updateWindowTitleButtonName();
 
@@ -67,6 +83,8 @@ ButtonEditDialog::ButtonEditDialog(JoyButton *button, QWidget *parent) :
         ui->buttonNameLineEdit->setText(button->getButtonName());
     }
 
+    PadderCommon::inputDaemonMutex.unlock();
+
     connect(qApp, SIGNAL(focusChanged(QWidget*,QWidget*)), this, SLOT(checkForKeyboardWidgetFocus(QWidget*,QWidget*)));
 
     connect(ui->virtualKeyMouseTabWidget, SIGNAL(selectionCleared()), this, SLOT(refreshSlotSummaryLabel()));
@@ -82,7 +100,7 @@ ButtonEditDialog::ButtonEditDialog(JoyButton *button, QWidget *parent) :
     connect(ui->advancedPushButton, SIGNAL(clicked()), this, SLOT(openAdvancedDialog()));
     connect(this, SIGNAL(advancedDialogOpened()), ui->virtualKeyMouseTabWidget, SLOT(establishVirtualKeyboardAdvancedSignalConnections()));
     connect(this, SIGNAL(advancedDialogOpened()), ui->virtualKeyMouseTabWidget, SLOT(establishVirtualMouseAdvancedSignalConnections()));
-    connect(ui->virtualKeyMouseTabWidget, SIGNAL(selectionMade(int)), this, SLOT(createTempSlot(int)));
+    //connect(ui->virtualKeyMouseTabWidget, SIGNAL(selectionMade(int)), this, SLOT(createTempSlot(int)));
 
     connect(ui->actionNameLineEdit, SIGNAL(textEdited(QString)), button, SLOT(setActionName(QString)));
     connect(ui->buttonNameLineEdit, SIGNAL(textEdited(QString)), button, SLOT(setButtonName(QString)));
@@ -148,15 +166,48 @@ void ButtonEditDialog::keyReleaseEvent(QKeyEvent *event)
         int controlcode = event->nativeScanCode();
         int virtualactual = event->nativeVirtualKey();
 
+        BaseEventHandler *handler = EventHandlerFactory::getInstance()->handler();
+
 #ifdef Q_OS_WIN
-        // Find more specific virtual key (VK_SHIFT -> VK_LSHIFT)
-        // by checking for extended bit in scan code.
-        int finalvirtual = WinExtras::correctVirtualKey(controlcode, virtualactual);
-        int checkalias = AntKeyMapper::getInstance()->returnQtKey(finalvirtual, controlcode);
+        int finalvirtual = 0;
+        int checkalias = 0;
+
+  #ifdef WITH_VMULTI
+      if (handler->getIdentifier() == "vmulti")
+      {
+          finalvirtual = WinExtras::correctVirtualKey(controlcode, virtualactual);
+          checkalias = AntKeyMapper::getInstance()->returnQtKey(finalvirtual);
+
+          //unsigned int tempQtKey = nativeWinKeyMapper.returnQtKey(finalvirtual);
+          QtKeyMapperBase *nativeWinKeyMapper = AntKeyMapper::getInstance()->getNativeKeyMapper();
+          unsigned int tempQtKey = 0;
+          if (nativeWinKeyMapper)
+          {
+              tempQtKey = nativeWinKeyMapper->returnQtKey(finalvirtual);
+          }
+
+          if (tempQtKey > 0)
+          {
+              finalvirtual = AntKeyMapper::getInstance()->returnVirtualKey(tempQtKey);
+              checkalias = AntKeyMapper::getInstance()->returnQtKey(finalvirtual);
+          }
+          else
+          {
+              finalvirtual = AntKeyMapper::getInstance()->returnVirtualKey(event->key());
+          }
+      }
+
+  #endif
+
+      BACKEND_ELSE_IF (handler->getIdentifier() == "sendinput")
+      {
+          // Find more specific virtual key (VK_SHIFT -> VK_LSHIFT)
+          // by checking for extended bit in scan code.
+          finalvirtual = WinExtras::correctVirtualKey(controlcode, virtualactual);
+          checkalias = AntKeyMapper::getInstance()->returnQtKey(finalvirtual, controlcode);
+      }
 
 #else
-
-        BaseEventHandler *handler = EventHandlerFactory::getInstance()->handler();
 
     #if defined(WITH_X11)
         int finalvirtual = 0;
@@ -173,14 +224,18 @@ void ButtonEditDialog::keyReleaseEvent(QKeyEvent *event)
         if (handler->getIdentifier() == "uinput")
         {
             // Find Qt Key corresponding to X11 KeySym.
-            checkalias = x11KeyMapper.returnQtKey(finalvirtual);
+            //checkalias = x11KeyMapper.returnQtKey(finalvirtual);
+            Q_ASSERT(AntKeyMapper::getInstance()->hasNativeKeyMapper());
+            QtKeyMapperBase *x11KeyMapper = AntKeyMapper::getInstance()->getNativeKeyMapper();
+            Q_ASSERT(x11KeyMapper != NULL);
+            checkalias = x11KeyMapper->returnQtKey(finalvirtual);
             // Find corresponding Linux input key for the Qt key.
             finalvirtual = AntKeyMapper::getInstance()->returnVirtualKey(checkalias);
         }
         #endif
 
         #ifdef WITH_XTEST
-        if (handler->getIdentifier() == "xtest")
+        BACKEND_ELSE_IF (handler->getIdentifier() == "xtest")
         {
             // Check for alias against group 1 keysym.
             checkalias = AntKeyMapper::getInstance()->returnQtKey(finalvirtual);
@@ -243,16 +298,24 @@ void ButtonEditDialog::keyReleaseEvent(QKeyEvent *event)
 
         if (controlcode > 0)
         {
-            if (checkalias > 0)
+            if (checkalias > 0 && finalvirtual > 0)
             {
                 JoyButtonSlot *tempslot = new JoyButtonSlot(finalvirtual, checkalias, JoyButtonSlot::JoyKeyboard, this);
                 emit keyGrabbed(tempslot);
             }
-            else
+            else if (virtualactual > 0)
             {
                 JoyButtonSlot *tempslot = new JoyButtonSlot(virtualactual, JoyButtonSlot::JoyKeyboard, this);
                 emit keyGrabbed(tempslot);
             }
+            else
+            {
+                QDialog::keyReleaseEvent(event);
+            }
+        }
+        else
+        {
+            QDialog::keyReleaseEvent(event);
         }
     }
     else
@@ -297,15 +360,17 @@ void ButtonEditDialog::openAdvancedDialog()
     connect(this, SIGNAL(keyGrabbed(JoyButtonSlot*)), dialog, SLOT(placeNewSlot(JoyButtonSlot*)));
     connect(this, SIGNAL(selectionCleared()), dialog, SLOT(clearAllSlots()));
     connect(ui->virtualKeyMouseTabWidget, SIGNAL(selectionMade(JoyButtonSlot*)), dialog, SLOT(placeNewSlot(JoyButtonSlot*)));
+    connect(ui->virtualKeyMouseTabWidget, SIGNAL(selectionMade(int, unsigned int)), this, SLOT(createTempSlot(int, unsigned int)));
     connect(ui->virtualKeyMouseTabWidget, SIGNAL(selectionCleared()), dialog, SLOT(clearAllSlots()));
 
     connect(this, SIGNAL(finished(int)), dialog, SLOT(close()));
     emit advancedDialogOpened();
 }
 
-void ButtonEditDialog::createTempSlot(int keycode)
+void ButtonEditDialog::createTempSlot(int keycode, unsigned int alias)
 {
-    JoyButtonSlot *slot = new JoyButtonSlot(keycode, JoyButtonSlot::JoyKeyboard, this);
+    JoyButtonSlot *slot = new JoyButtonSlot(keycode, alias,
+                                            JoyButtonSlot::JoyKeyboard, this);
     emit sendTempSlotToAdvanced(slot);
 }
 
@@ -322,7 +387,7 @@ void ButtonEditDialog::checkTurboSetting(bool state)
         ui->turboCheckBox->setEnabled(true);
     }
 
-    button->setUseTurbo(state);
+    helper.setUseTurbo(state);
 }
 
 void ButtonEditDialog::setTurboButtonEnabled(bool state)
@@ -334,6 +399,8 @@ void ButtonEditDialog::closedAdvancedDialog()
 {
     ui->advancedPushButton->setEnabled(true);
 
+    disconnect(ui->virtualKeyMouseTabWidget, SIGNAL(selectionMade(int, unsigned int)), this, 0);
+
     // Re-connect previously disconnected event
     connect(this, SIGNAL(keyGrabbed(JoyButtonSlot*)), this, SLOT(processSlotAssignment(JoyButtonSlot*)));
     connect(this, SIGNAL(selectionCleared()), this, SLOT(clearButtonSlots()));
@@ -343,15 +410,18 @@ void ButtonEditDialog::closedAdvancedDialog()
 
 void ButtonEditDialog::processSlotAssignment(JoyButtonSlot *tempslot)
 {
-    button->clearSlotsEventReset(false);
-    button->setAssignedSlot(tempslot->getSlotCode(), tempslot->getSlotCodeAlias(), tempslot->getSlotMode());
+    QMetaObject::invokeMethod(&helper, "setAssignedSlot", Qt::BlockingQueuedConnection,
+                              Q_ARG(int, tempslot->getSlotCode()),
+                              Q_ARG(unsigned int, tempslot->getSlotCodeAlias()),
+                              Q_ARG(JoyButtonSlot::JoySlotInputAction, tempslot->getSlotMode()));
+
     this->close();
     tempslot->deleteLater();
 }
 
 void ButtonEditDialog::clearButtonSlots()
 {
-    button->clearSlotsEventReset();
+    QMetaObject::invokeMethod(button, "clearSlotsEventReset", Q_ARG(bool, false));
 }
 
 void ButtonEditDialog::sendSelectionFinished()

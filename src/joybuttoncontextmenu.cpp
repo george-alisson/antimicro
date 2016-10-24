@@ -1,9 +1,28 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 #include <QActionGroup>
 
-#include "inputdevice.h"
-
 #include "joybuttoncontextmenu.h"
+
+#include "inputdevice.h"
+#include "common.h"
+
 
 JoyButtonContextMenu::JoyButtonContextMenu(JoyButton *button, QWidget *parent) :
     QMenu(parent)
@@ -16,6 +35,8 @@ JoyButtonContextMenu::JoyButtonContextMenu(JoyButton *button, QWidget *parent) :
 void JoyButtonContextMenu::buildMenu()
 {
     QAction *action = 0;
+
+    PadderCommon::inputDaemonMutex.lock();
 
     action = this->addAction(tr("Toggle"));
     action->setCheckable(true);
@@ -99,16 +120,22 @@ void JoyButtonContextMenu::buildMenu()
             tempSetMenu->setEnabled(false);
         }
     }
+
+    PadderCommon::inputDaemonMutex.unlock();
 }
 
 void JoyButtonContextMenu::switchToggle()
 {
+    PadderCommon::inputDaemonMutex.lock();
     button->setToggle(!button->getToggleState());
+    PadderCommon::inputDaemonMutex.unlock();
 }
 
 void JoyButtonContextMenu::switchTurbo()
 {
+    PadderCommon::inputDaemonMutex.lock();
     button->setToggle(!button->isUsingTurbo());
+    PadderCommon::inputDaemonMutex.unlock();
 }
 
 void JoyButtonContextMenu::switchSetMode()
@@ -132,19 +159,23 @@ void JoyButtonContextMenu::switchSetMode()
         temp = JoyButton::SetChangeWhileHeld;
     }
 
+    PadderCommon::inputDaemonMutex.lock();
     // First, remove old condition for the button in both sets.
     // After that, make the new assignment.
     button->setChangeSetCondition(JoyButton::SetChangeDisabled);
     button->setChangeSetSelection(setSelection);
     button->setChangeSetCondition(temp);
+    PadderCommon::inputDaemonMutex.unlock();
 }
 
 void JoyButtonContextMenu::disableSetMode()
 {
+    PadderCommon::inputDaemonMutex.lock();
     button->setChangeSetCondition(JoyButton::SetChangeDisabled);
+    PadderCommon::inputDaemonMutex.unlock();
 }
 
 void JoyButtonContextMenu::clearButton()
 {
-    button->clearSlotsEventReset();
+    QMetaObject::invokeMethod(button, "clearSlotsEventReset");
 }

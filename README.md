@@ -1,5 +1,23 @@
 # antimicro
 
+## We've Moved!
+
+As of May 24, 2016, antimicro has moved from
+[https://github.com/Ryochan7/antimicro](https://github.com/Ryochan7/antimicro) to
+[https://github.com/AntiMicro/antimicro](https://github.com/AntiMicro/antimicro).
+Additionally, project management has passed from Travis (Ryochan7) to the AntiMicro
+organization due to Travis having other interests and priorities.
+
+So, thank you for your patience as we settle in. And a special thank you to the
+following GitHub users who have helped us make the transition:
+* 7185
+* DarkStarSword
+* est31
+* ProfessorKaos64
+* qwerty12
+* WAZAAAAA0
+* zzpxyx
+
 ## Description
 
 antimicro is a graphical program used to map keyboard keys and mouse controls
@@ -33,13 +51,44 @@ Download links are currently available from the antimicro Releases section on
 GitHub. Currently, the Windows archive, Debian Jessie deb files, and source code
 archives can be found in the Releases section.
 
-[https://github.com/Ryochan7/antimicro/releases](https://github.com/Ryochan7/antimicro/releases)
+[https://github.com/AntiMicro/antimicro/releases](https://github.com/AntiMicro/antimicro/releases)
 
 For Ubuntu users, there is now a PPA available that you can use to have your
 package manager grab the latest antimicro updates automatically. For more details,
 check out the antimicro page on Launchpad.
 
 [https://launchpad.net/~ryochan7/+archive/ubuntu/antimicro](https://launchpad.net/~ryochan7/+archive/ubuntu/antimicro)
+
+## Command line
+
+    Usage: antimicro [options] [profile]
+
+    Options:
+    -h, --help                     Print help text.
+    -v, --version                  Print version information.
+    --tray                         Launch program in system tray only.
+    --no-tray                      Launch program with the tray menu disabled.
+    --hidden                       Launch program without the main window
+                                   displayed.
+    --profile <location>           Launch program with the configuration file
+                                   selected as the default for selected
+                                   controllers. Defaults to all controllers.
+    --profile-controller <value>   Apply configuration file to a specific
+                                   controller. Value can be a
+                                   controller index, name, or GUID.
+    --unload [<value>]             Unload currently enabled profile(s).
+                                   Value can be a controller index, name, or GUID.
+    --startSet <number> [<value>]  Start joysticks on a specific set.
+                                   Value can be a controller index, name, or GUID.
+    -d, --daemon                   Launch program as a daemon.
+    --log-level (debug|info)       Enable logging.
+    --eventgen (xtest|uinput)      Choose between using XTest support and uinput
+                                   support for event generation. Default: xtest.
+    -l, --list                     Print information about joysticks detected by
+                                   SDL.
+    --map <value>                  Open game controller mapping window of selected
+                                   controller. Value can be a controller index or
+                                   GUID.
 
 ## Pre-made Profiles
 
@@ -50,19 +99,19 @@ really convenient. In order to use those pre-made profiles, you have to be
 running at least antimicro version 2.0 and antimicro must have been compiled
 with SDL 2 support.
 
-[https://github.com/Ryochan7/antimicro-profiles](https://github.com/Ryochan7/antimicro-profiles)
+[https://github.com/AntiMicro/antimicro-profiles](https://github.com/AntiMicro/antimicro-profiles)
 
 ## Wiki
 
 An effort is now being done to utilize the Wiki section on GitHub more.
-Please check out the Wiki at [https://github.com/Ryochan7/antimicro/wiki](https://github.com/Ryochan7/antimicro/wiki)
+Please check out the Wiki at [https://github.com/AntiMicro/antimicro/wiki](https://github.com/AntiMicro/antimicro/wiki)
 to read various help pages that have been created. The Wiki is currently
 open to all GitHub users so feel free to add a new page or modify an
 existing page.
 
 ## Build Dependencies
 
-This program is written in C++ using the [Qt](http://qt-project.org/)
+This program is written in C++ using the [Qt](https://www.qt.io/)
 framework. A C++ compiler and a proper C++ build environment will need to be
 installed on your system prior to building this program. Under Debian and
 Debian-based distributions like Ubuntu, the
@@ -118,8 +167,8 @@ Modified by Travis Nickles.**
 
 * Download and install CMake: http://www.cmake.org/cmake/resources/software.html
 
-* You will need Qt with MinGW support: http://qt-project.org/downloads. The
-current version of Qt that is being used to create builds is 5.4.0.
+* You will need Qt with MinGW support: https://www.qt.io/download-open-source/. The
+current version of Qt that is being used to create builds is 5.6.0.
 
 * download SDL development package : http://www.libsdl.org/release/SDL2-devel-2.0.3-mingw.tar.gz
 
@@ -135,7 +184,7 @@ under the root antimicro folder and choose that for the build location.
 ```-DCMAKE_PREFIX_PATH=<Path to MinGW Qt install>```
 -DCMAKE_BUILD_TYPE=Release. Replace "```<Path to MinGW Qt install>```"
 with the actual path to your Qt installation. The default path for version
-Qt 5.4.0 is C:\Qt\Qt5.4.0\5.4\mingw491_32\.
+Qt 5.6.0 is C:\Qt\Qt5.6.0\5.6\mingw49_32\.
 
 * Choose "MinGW Generator" for the Generator option in the Run CMake section
 
@@ -239,10 +288,10 @@ devices behave a bit differently between the two systems.
 ## Support
 
 In order to obtain support, you can post an issue on the antimicro GitHub page
-or you can email me at nickles.travis@gmail.com. Please include **antimicro**
+or you can email me at jeff@jsbackus.com. Please include **antimicro**
 somewhere in the subject line of the email message or it might be skipped.
 
-[https://github.com/Ryochan7/antimicro](https://github.com/Ryochan7/antimicro)
+[https://github.com/AntiMicro/antimicro](https://github.com/AntiMicro/antimicro)
 
 ## Ideas For Future Features
 
@@ -262,6 +311,12 @@ this README. Opening the mind map will require the use of the program
 FreeMind which can be downloaded from
 [http://freemind.sourceforge.net/wiki/index.php/Main_Page](http://freemind.sourceforge.net/wiki/index.php/Main_Page).
 
+## Translating
+
+New translations as well as updates to current translations are always welcome.
+Please refer to
+[https://github.com/AntiMicro/antimicro/wiki/Translating-AntiMicro](https://github.com/AntiMicro/antimicro/wiki/Translating-AntiMicro)
+
 ## Shoutout
 
 A big inspiration for this program was the program QJoyPad
@@ -273,30 +328,27 @@ for this program mostly resembles QJoyPad.
 
 ## Credits
 
-### Main Developer
+### Original Developer
 Travis Nickles <nickles.travis@gmail.com>
 
 ### Contributors
 
 Zerro Alvein  
 aybe  
-Jeff Backus <jeff.backus@gmail.com>  
+Jeff Backus <jeff@jsbackus.com>  
+Arthur Moore  
 Anton Tornqvist <antont@inbox.lv>
 
 ### Translators
 
 VaGNaroK <vagnarokalkimist@gmail.com> - Brazilian Portuguese  
+zzpxyx - Chinese  
 Belleguic Terence <hizo@free.fr> - French  
 Leonard Koenig <leonard.r.koenig@googlemail.com> - German  
 phob - German  
+tou omiya - Japanese  
 Dmitriy Koshel <form.eater@gmail.com> - Russian  
 Jay Alexander Fleming <tito.nehru.naser@gmail.com> - Serbian  
-burunduk - Ukrainian
-
-## Donate
-
-If you would like to help fund future development of this project,
-please send a donation via PayPal to ryoohki7@yahoo.com. Any financial help
-would be greatly appreciated. As a disclaimer, I should mention that any
-donations received might go towards buying games to test against. Some
-donations might just go towards groceries so that I can eat.
+burunduk - Ukrainian  
+Flavio HR <flavio.hrx@gmail.com> - Spanish  
+WAZAAAAA - wazaaaaa00<@>gmail<.>com - Italian  

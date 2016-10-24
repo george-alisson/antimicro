@@ -1,7 +1,25 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <QMenu>
 
 #include "joycontrolstickbuttonpushbutton.h"
 #include "joybuttoncontextmenu.h"
+#include "joycontrolstick.h"
 
 JoyControlStickButtonPushButton::JoyControlStickButtonPushButton(JoyControlStickButton *button, bool displayNames, QWidget *parent) :
     FlashButtonWidget(displayNames, parent)
@@ -11,17 +29,16 @@ JoyControlStickButtonPushButton::JoyControlStickButtonPushButton(JoyControlStick
     refreshLabel();
     enableFlashes();
 
-    if (button->getButtonState())
-    {
-        flash();
-    }
+    tryFlash();
 
     this->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(this, SIGNAL(customContextMenuRequested(const QPoint&)), this, SLOT(showContextMenu(const QPoint&)));
 
-    connect(button, SIGNAL(slotsChanged()), this, SLOT(refreshLabel()));
+    //connect(button, SIGNAL(slotsChanged()), this, SLOT(refreshLabel()));
     connect(button, SIGNAL(propertyUpdated()), this, SLOT(refreshLabel()));
-    connect(button, SIGNAL(activeZoneChanged()), this, SLOT(refreshLabel()), Qt::QueuedConnection);
+    connect(button, SIGNAL(activeZoneChanged()), this, SLOT(refreshLabel()));
+    connect(button->getStick()->getModifierButton(), SIGNAL(activeZoneChanged()),
+            this, SLOT(refreshLabel()));
 }
 
 JoyControlStickButton* JoyControlStickButtonPushButton::getButton()
@@ -34,7 +51,7 @@ void JoyControlStickButtonPushButton::setButton(JoyControlStickButton *button)
     disableFlashes();
     if (this->button)
     {
-        disconnect(this->button, SIGNAL(slotsChanged()), this, SLOT(refreshLabel()));
+        //disconnect(this->button, SIGNAL(slotsChanged()), this, SLOT(refreshLabel()));
         disconnect(button, SIGNAL(propertyUpdated()), this, SLOT(refreshLabel()));
         disconnect(this->button, SIGNAL(activeZoneChanged()), this, SLOT(refreshLabel()));
     }
@@ -42,7 +59,7 @@ void JoyControlStickButtonPushButton::setButton(JoyControlStickButton *button)
     this->button = button;
     refreshLabel();
     enableFlashes();
-    connect(button, SIGNAL(slotsChanged()), this, SLOT(refreshLabel()));
+    //connect(button, SIGNAL(slotsChanged()), this, SLOT(refreshLabel()));
     connect(button, SIGNAL(propertyUpdated()), this, SLOT(refreshLabel()));
     connect(button, SIGNAL(activeZoneChanged()), this, SLOT(refreshLabel()), Qt::QueuedConnection);
 }
@@ -82,7 +99,7 @@ QString JoyControlStickButtonPushButton::generateLabel()
         }
         else
         {
-            temp = button->getActiveZoneSummary().replace("&", "&&");
+            temp = button->getCalculatedActiveZoneSummary().replace("&", "&&");
         }
     }
 
@@ -95,4 +112,12 @@ void JoyControlStickButtonPushButton::showContextMenu(const QPoint &point)
     JoyButtonContextMenu *contextMenu = new JoyButtonContextMenu(button, this);
     contextMenu->buildMenu();
     contextMenu->popup(globalPos);
+}
+
+void JoyControlStickButtonPushButton::tryFlash()
+{
+    if (button->getButtonState())
+    {
+        flash();
+    }
 }

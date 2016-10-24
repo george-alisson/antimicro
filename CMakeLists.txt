@@ -1,6 +1,24 @@
+## antimicro Gamepad to KB+M event mapper
+## Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+##
+## This program is free software: you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation, either version 3 of the License, or
+## (at your option) any later version.
+##
+## This program is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
 # Debian Wheezy has a package for version 2.8.9 so
 # that will be the minimum supported version.
 cmake_minimum_required(VERSION 2.8.9)
+#SET(CMAKE_BUILD_TYPE Debug)
 project(antimicro)
 
 if(WIN32)
@@ -15,7 +33,7 @@ endif(WIN32)
 
 # The version number.
 set(ANTIMICRO_MAJOR_VERSION 2)
-set(ANTIMICRO_MINOR_VERSION 13)
+set(ANTIMICRO_MINOR_VERSION 21)
 set(ANTIMICRO_PATCH_VERSION 0)
 
 option(USE_SDL_2 "Use SDL 2 libraries rather than SDL 1." ON)
@@ -28,14 +46,19 @@ if(UNIX)
 endif(UNIX)
 
 option(UPDATE_TRANSLATIONS "Call lupdate to update translation files from source." OFF)
+option(TRANS_KEEP_OBSOLETE "Do not specify -no-obsolete when calling lupdate." OFF)
 
 if(WIN32)
     option(PORTABLE_PACKAGE "Create portable Windows package" OFF)
-    option(TARGET_ARCH "Choose which version of some libraries to use. (x86, x86_64)" "x86")
-    set(TARGET_ARCH "x86")
+    #option(TARGET_ARCH "Choose which version of some libraries to use. (x86, x86_64)" "x86")
+    option(WITH_VMULTI "Compile with support for vmulti." OFF)
+    option(PERFORM_SIGNING "Sign final executable." OFF)
+	set(TARGET_ARCH "x86")
     set(PORTABLE_PACKAGE ON)
 
     if(PORTABLE_PACKAGE)
+        message("Portable package mode build")
+
         add_definitions(-DWIN_PORTABLE_PACKAGE)
 
         # Only way to force install target to be dependent on createprofiledir.
@@ -47,19 +70,30 @@ if(WIN32)
         install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/profiles" DESTINATION ${CMAKE_INSTALL_PREFIX})
     endif(PORTABLE_PACKAGE)
 
-    if(TARGET_ARCH)
-        set(ARCH_OPTIONS "x86" "x86_64")
-        list(FIND ARCH_OPTIONS ${TARGET_ARCH} ARCH_INDEX)
-        if(ARCH_INDEX EQUAL -1)
-            message(FATAL_ERROR "No valid architecture choice used. Exiting.")
-        endif(ARCH_INDEX EQUAL -1)
-    endif(TARGET_ARCH)
+    # Find target architecture based on the compiler.
+    if (CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(TARGET_ARCH "x86_64")
+    else()
+        set(TARGET_ARCH "x86")
+    endif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+
+    #if(TARGET_ARCH)
+    #    set(ARCH_OPTIONS "x86" "x86_64")
+    #    list(FIND ARCH_OPTIONS ${TARGET_ARCH} ARCH_INDEX)
+    #    if(ARCH_INDEX EQUAL -1)
+    #        message(FATAL_ERROR "No valid architecture choice used. Exiting.")
+    #    endif(ARCH_INDEX EQUAL -1)
+    #endif(TARGET_ARCH)
+
+    if(WITH_VMULTI)
+        add_definitions(-DWITH_VMULTI)
+    endif(WITH_VMULTI)
 endif(WIN32)
 
 # Use pkg-config to find SDL library.
 if(UNIX)
     find_package(PkgConfig REQUIRED)
-    include(FindPkgConfig)
+    #include(FindPkgConfig)
 
     if(USE_SDL_2)
         pkg_check_modules(SDL2 REQUIRED sdl2)
@@ -168,60 +202,23 @@ set(antimicro_SOURCES src/main.cpp
     src/logger.cpp
     src/inputdevicebitarraystatus.cpp
     src/applaunchhelper.cpp
-    src/firstrunwizard/firstrunwizard.cpp
-    src/firstrunwizard/mousesettingspage.cpp
-    src/firstrunwizard/firstrunwelcomepage.cpp
-    src/firstrunwizard/languageselectionpage.cpp
+    src/slotitemlistwidget.cpp
+    src/eventhandlers/baseeventhandler.cpp
+    src/eventhandlerfactory.cpp
+    src/uihelpers/advancebuttondialoghelper.cpp
+    src/uihelpers/buttoneditdialoghelper.cpp
+    src/uihelpers/joytabwidgethelper.cpp
+    src/uihelpers/joyaxiscontextmenuhelper.cpp
+    src/uihelpers/joycontrolstickcontextmenuhelper.cpp
+    src/uihelpers/dpadcontextmenuhelper.cpp
+    src/uihelpers/dpadeditdialoghelper.cpp
+    src/uihelpers/joycontrolstickeditdialoghelper.cpp
+    src/uihelpers/gamecontrollermappingdialoghelper.cpp
+    src/mousedialog/uihelpers/mouseaxissettingsdialoghelper.cpp
+    src/mousedialog/uihelpers/mousebuttonsettingsdialoghelper.cpp
+    src/mousedialog/uihelpers/mousecontrolsticksettingsdialoghelper.cpp
+    src/mousedialog/uihelpers/mousedpadsettingsdialoghelper.cpp
 )
-
-# Platform dependent files.
-if(UNIX)
-    LIST(APPEND antimicro_SOURCES
-         src/eventhandlers/baseeventhandler.cpp
-         src/eventhandlerfactory.cpp
-    )
-
-    if(WITH_X11)
-        LIST(APPEND antimicro_SOURCES src/x11extras.cpp
-             src/qtx11keymapper.cpp
-             src/unixcapturewindowutility.cpp
-             src/autoprofilewatcher.cpp
-             src/capturedwindowinfodialog.cpp
-        )
-
-        if(WITH_XTEST)
-            LIST(APPEND antimicro_SOURCES src/eventhandlers/xtesteventhandler.cpp)
-        endif(WITH_XTEST)
-    endif(WITH_X11)
-
-    if(WITH_UINPUT)
-        LIST(APPEND antimicro_SOURCES src/qtuinputkeymapper.cpp
-             src/uinputhelper.cpp
-             src/eventhandlers/uinputeventhandler.cpp
-        )
-    endif(WITH_UINPUT)
-
-elseif(WIN32)
-    LIST(APPEND antimicro_SOURCES src/winextras.cpp
-         src/qtwinkeymapper.cpp
-         src/winappprofiletimerdialog.cpp
-         src/autoprofilewatcher.cpp
-         src/capturedwindowinfodialog.cpp
-         src/firstrunwizard/associateprofilespage.cpp
-    )
-endif(UNIX)
-
-# Files that require SDL 2 support.
-if(USE_SDL_2)
-    LIST(APPEND antimicro_SOURCES src/gamecontroller/gamecontroller.cpp
-         src/gamecontroller/gamecontrollerdpad.cpp
-         src/gamecontroller/gamecontrollerset.cpp
-         src/gamecontroller/gamecontrollertrigger.cpp
-         src/gamecontrollermappingdialog.cpp
-         src/gamecontrollerexample.cpp
-    )
-endif(USE_SDL_2)
-
 
 set(antimicro_HEADERS src/mainwindow.h
     src/joybuttonwidget.h
@@ -299,60 +296,23 @@ set(antimicro_HEADERS src/mainwindow.h
     src/logger.h
     src/inputdevicebitarraystatus.h
     src/applaunchhelper.h
-    src/firstrunwizard/firstrunwizard.h
-    src/firstrunwizard/mousesettingspage.h
-    src/firstrunwizard/firstrunwelcomepage.h
-    src/firstrunwizard/languageselectionpage.h
+    src/slotitemlistwidget.h
+    src/eventhandlers/baseeventhandler.h
+    src/eventhandlerfactory.h
+    src/uihelpers/advancebuttondialoghelper.h
+    src/uihelpers/buttoneditdialoghelper.h
+    src/uihelpers/joytabwidgethelper.h
+    src/uihelpers/joyaxiscontextmenuhelper.h
+    src/uihelpers/joycontrolstickcontextmenuhelper.h
+    src/uihelpers/dpadcontextmenuhelper.h
+    src/uihelpers/dpadeditdialoghelper.h
+    src/uihelpers/joycontrolstickeditdialoghelper.h
+    src/uihelpers/gamecontrollermappingdialoghelper.h
+    src/mousedialog/uihelpers/mouseaxissettingsdialoghelper.h
+    src/mousedialog/uihelpers/mousebuttonsettingsdialoghelper.h
+    src/mousedialog/uihelpers/mousecontrolsticksettingsdialoghelper.h
+    src/mousedialog/uihelpers/mousedpadsettingsdialoghelper.h
 )
-
-# Platform dependent files.
-if(UNIX)
-    LIST(APPEND antimicro_HEADERS
-         src/eventhandlers/baseeventhandler.h
-         src/eventhandlerfactory.h
-    )
-
-    if(WITH_X11)
-        LIST(APPEND antimicro_HEADERS src/x11extras.h
-             src/qtx11keymapper.h
-             src/unixcapturewindowutility.h
-             src/autoprofilewatcher.h
-             src/capturedwindowinfodialog.h
-        )
-
-        if(WITH_XTEST)
-            LIST(APPEND antimicro_HEADERS src/eventhandlers/xtesteventhandler.h)
-        endif(WITH_XTEST)
-    endif(WITH_X11)
-
-    if(WITH_UINPUT)
-        LIST(APPEND antimicro_HEADERS src/qtuinputkeymapper.h
-             src/uinputhelper.h
-             src/eventhandlers/uinputeventhandler.h
-        )
-    endif(WITH_UINPUT)
-
-elseif(WIN32)
-    LIST(APPEND antimicro_HEADERS src/winextras.h
-        src/qtwinkeymapper.h
-        src/winappprofiletimerdialog.h
-        src/autoprofilewatcher.h
-        src/capturedwindowinfodialog.h
-        src/firstrunwizard/associateprofilespage.h
-    )
-endif(UNIX)
-
-# Files that require SDL 2 support.
-if(USE_SDL_2)
-    LIST(APPEND antimicro_HEADERS src/gamecontroller/gamecontroller.h
-        src/gamecontroller/gamecontrollerdpad.h
-        src/gamecontroller/gamecontrollerset.h
-        src/gamecontroller/gamecontrollertrigger.h
-        src/gamecontrollermappingdialog.h
-        src/gamecontrollerexample.h
-    )
-endif(USE_SDL_2)
-
 
 set(antimicro_FORMS src/mainwindow.ui
     src/axiseditdialog.ui
@@ -376,32 +336,106 @@ set(antimicro_FORMS src/mainwindow.ui
     src/capturedwindowinfodialog.ui
 )
 
-if(WIN32)
-    LIST(APPEND antimicro_FORMS src/winappprofiletimerdialog.ui)
-endif(WIN32)
-
 set(antimicro_RESOURCES src/resources.qrc)
-if(WIN32)
-    # Add Windows specific resource file used for application
-    # icons.
+
+# Files that require SDL 2 support.
+if(USE_SDL_2)
+    LIST(APPEND antimicro_SOURCES src/gamecontroller/gamecontroller.cpp
+         src/gamecontroller/gamecontrollerdpad.cpp
+         src/gamecontroller/gamecontrollerset.cpp
+         src/gamecontroller/gamecontrollertrigger.cpp
+         src/gamecontrollermappingdialog.cpp
+         src/gamecontrollerexample.cpp
+    )
+    LIST(APPEND antimicro_HEADERS src/gamecontroller/gamecontroller.h
+        src/gamecontroller/gamecontrollerdpad.h
+        src/gamecontroller/gamecontrollerset.h
+        src/gamecontroller/gamecontrollertrigger.h
+        src/gamecontrollermappingdialog.h
+        src/gamecontrollerexample.h
+    )
+endif(USE_SDL_2)
+
+# Platform dependent files.
+if(UNIX)
+    if(WITH_X11)
+        LIST(APPEND antimicro_SOURCES src/x11extras.cpp
+             src/qtx11keymapper.cpp
+             src/unixcapturewindowutility.cpp
+             src/autoprofilewatcher.cpp
+             src/capturedwindowinfodialog.cpp
+        )
+        LIST(APPEND antimicro_HEADERS src/x11extras.h
+             src/qtx11keymapper.h
+             src/unixcapturewindowutility.h
+             src/autoprofilewatcher.h
+             src/capturedwindowinfodialog.h
+        )
+
+        if(WITH_XTEST)
+            LIST(APPEND antimicro_SOURCES src/eventhandlers/xtesteventhandler.cpp)
+            LIST(APPEND antimicro_HEADERS src/eventhandlers/xtesteventhandler.h)
+        endif(WITH_XTEST)
+    endif(WITH_X11)
+
+    if(WITH_UINPUT)
+        LIST(APPEND antimicro_SOURCES src/qtuinputkeymapper.cpp
+             src/uinputhelper.cpp
+             src/eventhandlers/uinputeventhandler.cpp
+        )
+        LIST(APPEND antimicro_HEADERS src/qtuinputkeymapper.h
+             src/uinputhelper.h
+             src/eventhandlers/uinputeventhandler.h
+        )
+    endif(WITH_UINPUT)
+
+elseif(WIN32)
+    LIST(APPEND antimicro_SOURCES src/winextras.cpp
+         src/qtwinkeymapper.cpp
+         src/winappprofiletimerdialog.cpp
+         src/autoprofilewatcher.cpp
+         src/capturedwindowinfodialog.cpp
+         src/eventhandlers/winsendinputeventhandler.cpp
+         src/joykeyrepeathelper.cpp
+    )
+    LIST(APPEND antimicro_HEADERS src/winextras.h
+        src/qtwinkeymapper.h
+        src/winappprofiletimerdialog.h
+        src/autoprofilewatcher.h
+        src/capturedwindowinfodialog.h
+        src/eventhandlers/winsendinputeventhandler.h
+        src/joykeyrepeathelper.h
+    )
+    LIST(APPEND antimicro_FORMS src/winappprofiletimerdialog.ui)
+    # Add Windows specific resource file used for application icons.
     LIST(APPEND antimicro_RESOURCES src/resources_windows.qrc)
-endif(WIN32)
+
+    if(WITH_VMULTI)
+        list(APPEND antimicro_SOURCES src/qtvmultikeymapper.cpp
+             src/eventhandlers/winvmultieventhandler.cpp
+#            vmulti/client/client.c
+        )
+        list(APPEND antimicro_HEADERS src/qtvmultikeymapper.h
+             src/eventhandlers/winvmultieventhandler.h
+        )
+    endif(WITH_VMULTI)
+endif(UNIX)
 
 set(USE_QT5 OFF)
 set(USE_QT4 OFF)
 
 if(UNIX)
-    # Check if Qt4 was specified using an environment variable
+    # Check if Qt 4 or 5 was specified using an environment variable
     # or by specifying -DQT_QMAKE_EXECUTABLE.
     # Otherwise, check for Qt libraries.
-    if ("$ENV{QT_SELECT}" EQUAL 4)
-        set(USE_QT4 ON)
-    elseif(QT_QMAKE_EXECUTABLE MATCHES ".*/qmake-qt4")
-        set(USE_QT4 ON)
-    elseif("$ENV{QT_SELECT}" EQUAL 5)
+    if("$ENV{QT_SELECT}" EQUAL 5)
         set(USE_QT5 ON)
     elseif(QT_QMAKE_EXECUTABLE MATCHES ".*/qmake-qt5")
         set(USE_QT5 ON)
+    elseif ("$ENV{QT_SELECT}" EQUAL 4)
+        set(USE_QT4 ON)
+    elseif(QT_QMAKE_EXECUTABLE MATCHES ".*/qmake-qt4")
+        set(USE_QT4 ON)
     else()
         find_package(Qt5Core QUIET)
         if(Qt5Core_FOUND)
@@ -414,7 +448,7 @@ if(UNIX)
                 message(FATAL_ERROR "No Qt libraries could be found.")
             endif(QT_FOUND)
         endif(Qt5Core_FOUND)
-    endif("$ENV{QT_SELECT}" EQUAL 4)
+    endif("$ENV{QT_SELECT}" EQUAL 5)
 elseif(WIN32)
     # Use Qt5 on Windows.
     set(USE_QT5 ON)
@@ -434,6 +468,12 @@ endif(USE_QT5)
 if(USE_SDL_2)
     add_definitions(-DUSE_SDL_2)
 endif(USE_SDL_2)
+
+if (WIN32)
+    if(PERFORM_SIGNING)
+        add_definitions(-DPERFORM_SIGNING)
+    endif(PERFORM_SIGNING)
+endif (WIN32)
 
 if(UNIX)
     if(WITH_X11)
@@ -541,14 +581,12 @@ endif(UNIX)
 
 if(UNIX)
     if(WITH_X11)
-        LIST(APPEND LIBS X11)
-        if(WITH_UINPUT)
-            LIST(APPEND LIBS Xi)
-        endif(WITH_UINPUT)
+        LIST(APPEND LIBS ${X11_X11_LIB})
+        LIST(APPEND LIBS ${X11_Xi_LIB})
     endif(WITH_X11)
 
     if(WITH_XTEST)
-        LIST(APPEND LIBS Xtst)
+        LIST(APPEND LIBS ${X11_XTest_LIB})
     endif(WITH_XTEST)
 
     if(USE_SDL_2)
@@ -558,22 +596,65 @@ if(UNIX)
     endif(USE_SDL_2)
 elseif (WIN32)
     if(USE_SDL_2)
-        # Perform extra voodoo to get proper library paths and include
-        # proper headers.
-        if(TARGET_ARCH STREQUAL "x86")
-            find_library(SDL2_LIBRARY SDL2 "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/i686-w64-mingw32/lib")
-            list(APPEND LIBS ${SDL2_LIBRARY})
-            include_directories("${PROJECT_SOURCE_DIR}/SDL2-2.0.3/i686-w64-mingw32/include")
-        else()
-            find_library(SDL2_LIBRARY SDL2 "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/x86_64-w64-mingw32/lib")
-            list(APPEND LIBS ${SDL2_LIBRARY})
-            include_directories("${PROJECT_SOURCE_DIR}/SDL2-2.0.3/x86_64-w64-mingw32/include")
-        endif(TARGET_ARCH STREQUAL "x86")
+        set(SDL2_LIBRARY "")
+        set(SDL2_LIBRARY_DIR "")
+        set(SDL2_INCLUDE_DIR "")
+        set(SDL2_DLL_LOCATION_DIR "")
+
+        if (MSYS OR MINGW)
+            find_package(PkgConfig QUIET)
+            if(PKG_CONFIG_FOUND)
+                #include(FindPkgConfig)
+
+                pkg_check_modules(SDL2 QUIET sdl2)
+                if(SDL2_FOUND)
+                    #find_path(SDL2_INCLUDE_DIR "SDL2/SDL.h" HINTS ${SDL2_INCLUDE_DIRS})
+
+                    set(SDL2_LIBRARY ${SDL2_LIBRARIES})
+                    set(SDL2_LIBRARY_DIR ${SDL2_LIBRARY_DIRS})
+                    set(SDL2_INCLUDE_DIR ${SDL2_INCLUDE_DIRS})
+                    unset(SDL2_DLL_LOCATION_DIR)
+                    find_path(SDL2_DLL_LOCATION_DIR "SDL2.dll" HINTS "${SDL2_LIBRARY_DIRS}/../bin")
+                    #set(SDL2_DLL_LOCATION_DIR "${SDL2_LIBRARY_DIRS}/../bin")
+
+                    list(APPEND LIBS ${SDL2_LIBRARIES})
+                endif(SDL2_FOUND)
+            endif(PKG_CONFIG_FOUND)
+        endif(MSYS OR MINGW)
+
+        if (NOT SDL2_LIBRARY AND EXISTS "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/")
+            # Perform extra voodoo to get proper library paths and include
+            # proper headers.
+            unset(SDL2_LIBRARY)
+
+            if(TARGET_ARCH STREQUAL "x86_64")
+                set(SDL2_LIBRARY_DIR "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/x86_64-w64-mingw32/lib")
+                set(SDL2_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/x86_64-w64-mingw32/include")
+                set(SDL2_DLL_LOCATION_DIR "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/x86_64-w64-mingw32/bin")
+
+                find_library(SDL2_LIBRARY SDL2 ${SDL2_LIBRARY_DIR})
+                list(APPEND LIBS ${SDL2_LIBRARY})
+                include_directories(${SDL2_INCLUDE_DIR})
+            else()
+                set(SDL2_LIBRARY_DIR "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/i686-w64-mingw32/lib")
+                set(SDL2_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/i686-w64-mingw32/include")
+                set(SDL2_DLL_LOCATION_DIR "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/i686-w64-mingw32/bin")
+
+                find_library(SDL2_LIBRARY SDL2 ${SDL2_LIBRARY_DIR})
+                list(APPEND LIBS ${SDL2_LIBRARY})
+                include_directories(${SDL2_INCLUDE_DIR})
+            endif(TARGET_ARCH STREQUAL "x86_64")
+        endif(NOT SDL2_LIBRARY AND EXISTS "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/")
 
         add_definitions(-DUNICODE -D_UNICODE)
     endif(USE_SDL_2)
 
     list(APPEND LIBS "psapi")
+
+    if(WITH_VMULTI)
+        include_directories("${PROJECT_SOURCE_DIR}/vmulti/inc")
+        list(APPEND LIBS "hid" "setupapi")
+    endif(WITH_VMULTI)
 endif (UNIX)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -589,7 +670,6 @@ if(USE_QT5)
         add_executable(antimicro ${antimicro_SOURCES}
             ${antimicro_FORMS_HEADERS}
             ${antimicro_RESOURCES_RCC}
-            src/antimicro.rc
         )
     elseif(WIN32)
         # The WIN32 is required to specify a GUI application.
@@ -663,17 +743,21 @@ configure_file(
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/Changelog DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/src/)
 
 if(WIN32)
-    if(TARGET_ARCH STREQUAL "x86")
-        # Copy SDL2.dll to find installation directory.
-        add_custom_target(copy_sdl_dll
-            COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/i686-w64-mingw32/bin/SDL2.dll" ${CMAKE_CURRENT_BINARY_DIR}
-        )
-    else()
-        # Copy SDL2.dll to find installation directory.
-        add_custom_target(copy_sdl_dll
-            COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/x86_64-w64-mingw32/bin/SDL2.dll" ${CMAKE_CURRENT_BINARY_DIR}
-        )
-    endif(TARGET_ARCH STREQUAL "x86")
+    #if(TARGET_ARCH STREQUAL "x86_64")
+    #    # Copy SDL2.dll to find installation directory.
+    #    add_custom_target(copy_sdl_dll
+    #        COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/x86_64-w64-mingw32/bin/SDL2.dll" ${CMAKE_CURRENT_BINARY_DIR}
+    #    )
+    #else()
+    #    # Copy SDL2.dll to find installation directory.
+    #    add_custom_target(copy_sdl_dll
+    #        COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/i686-w64-mingw32/bin/SDL2.dll" ${CMAKE_CURRENT_BINARY_DIR}
+    #    )
+    #endif(TARGET_ARCH STREQUAL "x86_64")
+
+    add_custom_target(copy_sdl_dll
+        COMMAND ${CMAKE_COMMAND} -E copy "${SDL2_DLL_LOCATION_DIR}/SDL2.dll" ${CMAKE_CURRENT_BINARY_DIR}
+    )
 
 
     # Obtain location of Qt5 DLL files and assign them to a list.
@@ -689,22 +773,21 @@ if(WIN32)
     )
 
     # Copy relevant DLL files depending on the chosen architecture.
-    if(TARGET_ARCH STREQUAL "x86")
-        list(APPEND EXTRA_DLL_FILES "${QTCORE_DLL_LOCATION}/icudt53.dll"
-            "${QTCORE_DLL_LOCATION}/icuin53.dll"
-            "${QTCORE_DLL_LOCATION}/icuuc53.dll"
-            "${QTCORE_DLL_LOCATION}/libgcc_s_dw2-1.dll"
-            "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/i686-w64-mingw32/bin/SDL2.dll"
+    if(TARGET_ARCH STREQUAL "x86_64")
+        list(APPEND EXTRA_DLL_FILES "${QTCORE_DLL_LOCATION}/icudt54.dll"
+            "${QTCORE_DLL_LOCATION}/icuin54.dll"
+            "${QTCORE_DLL_LOCATION}/icuuc54.dll"
+            "${QTCORE_DLL_LOCATION}/libgcc_s_seh-1.dll"
+            "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/x86_64-w64-mingw32/bin/SDL2.dll"
         )
     else()
         list(APPEND EXTRA_DLL_FILES "${QTCORE_DLL_LOCATION}/icudt54.dll"
             "${QTCORE_DLL_LOCATION}/icuin54.dll"
             "${QTCORE_DLL_LOCATION}/icuuc54.dll"
-            "${QTCORE_DLL_LOCATION}/libgcc_s_sjlj-1.dll"
-            "${QTCORE_DLL_LOCATION}/libGLESv2.dll"
-            "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/x86_64-w64-mingw32/bin/SDL2.dll"
+            "${QTCORE_DLL_LOCATION}/libgcc_s_dw2-1.dll"
+            "${PROJECT_SOURCE_DIR}/SDL2-2.0.3/i686-w64-mingw32/bin/SDL2.dll"
         )
-    endif(TARGET_ARCH STREQUAL "x86")
+    endif(TARGET_ARCH STREQUAL "x86_64")
 
     # Target to copy Qt DLL files.
     add_custom_target(install_extra_dlls)
@@ -735,26 +818,50 @@ if(WIN32)
         install_platforms_dll
     )
 
+    # Copy bundled Qt translation files.
+    file(GLOB QT_TRANSLATION_FILES "${CMAKE_PREFIX_PATH}/translations/qt_[^help]*.qm")
+    add_custom_target(copy_qt_translations)
+    foreach(CURRENT_QM_FILE ${QT_TRANSLATION_FILES})
+        set(CURRENT_QM_FILENAME "")
+        string(REPLACE "${CMAKE_PREFIX_PATH}/translations/" "" CURRENT_QM_FILENAME ${CURRENT_QM_FILE})
+        add_custom_command(TARGET copy_qt_translations PRE_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy "${CURRENT_QM_FILE}"
+            "${CMAKE_INSTALL_PREFIX}/share/qt/translations/${CURRENT_QM_FILENAME}"
+        )
+    endforeach()
+
+    # Sign final executable
+    if(PERFORM_SIGNING)
+      install(CODE "execute_process(COMMAND \"C:/Program Files (x86)/Windows Kits/8.1/bin/x64/signtool.exe\"
+              sign /v /a /s ROOT /n antimicro ${CMAKE_INSTALL_PREFIX}/antimicro.exe)")
+    endif(PERFORM_SIGNING)
+
     # Set variables needed for MSI building.
     set(MSIFOLDER "${PROJECT_SOURCE_DIR}/windows")
     set(WIXENV $ENV{WIX})
 
     # Use a different file for each architecture due
     # to some DLL differences.
-    if(TARGET_ARCH STREQUAL "x86")
-        set(WIXWXS "${MSIFOLDER}/antimicro.wxs")
-    else()
+    if(TARGET_ARCH STREQUAL "x86_64")
         set(WIXWXS "${MSIFOLDER}/antimicro_64.wxs")
-    endif(TARGET_ARCH STREQUAL "x86")
+    else()
+        set(WIXWXS "${MSIFOLDER}/antimicro.wxs")
+    endif(TARGET_ARCH STREQUAL "x86_64")
 
     set(WIXOBJ "${MSIFOLDER}/antimicro.wixobj")
 
+    # Use version number in output file name.
+    set(MSIFILENAME "${ANTIMICRO_MAJOR_VERSION}.${ANTIMICRO_MINOR_VERSION}")
+    if(ANTIMICRO_PATCH_VERSION AND NOT ANTIMICRO_PATCH_VERSION EQUAL 0)
+        set(MSIFILENAME "${MSIFILENAME}.${ANTIMICRO_PATCH_VERSION}")
+    endif(ANTIMICRO_PATCH_VERSION AND NOT ANTIMICRO_PATCH_VERSION EQUAL 0)
+
     # Change output file depending on the target architecture.
-    if(TARGET_ARCH STREQUAL "x86")
-        set(WIXMSI "${MSIFOLDER}/antimicro.msi")
+    if(TARGET_ARCH STREQUAL "x86_64")
+        set(WIXMSI "${MSIFOLDER}/antimicro-${MSIFILENAME}-win64.msi")
     else()
-        set(WIXMSI "${MSIFOLDER}/antimicro_64.msi")
-    endif(TARGET_ARCH STREQUAL "x86")
+        set(WIXMSI "${MSIFOLDER}/antimicro-${MSIFILENAME}-win32.msi")
+    endif(TARGET_ARCH STREQUAL "x86_64")
 
     if(NOT WIXENV)
         # Display message when WIX is not set up. No extra target will be added.
@@ -762,14 +869,24 @@ if(WIN32)
     else()
         # Target to build .msi installer file.
         add_custom_target(buildmsi)
+
+        # Change arch value passed to candle.exe
+        set(WIXARCH "")
+        if(TARGET_ARCH STREQUAL "x86_64")
+            set(WIXARCH "x64")
+        else()
+            set(WIXARCH "x86")
+        endif(TARGET_ARCH STREQUAL "x86_64")
+
         add_custom_command(TARGET buildmsi PRE_BUILD
-            COMMAND "${WIXENV}\\bin\\candle.exe" ${WIXWXS} -out ${WIXOBJ} -sw1113 &&
-                "${WIXENV}\\bin\\light.exe" ${WIXOBJ} -out ${WIXMSI} -sw1076 -spdb
+            COMMAND "${WIXENV}\\bin\\candle.exe" ${WIXWXS} -out ${WIXOBJ} -sw1113 -arch ${WIXARCH} &&
+            "${WIXENV}\\bin\\light.exe" ${WIXOBJ} -out ${WIXMSI} -sw1076 -spdb
         )
         set(WIXFILES ${WIXOBJ} ${WIXMSI})
         set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${WIXFILES}")
     endif(NOT WIXENV)
 
     # Copy extra files to include in the final archive.
-    install(FILES gpl.txt Changelog README.md DESTINATION ${CMAKE_INSTALL_PREFIX})
+    install(FILES gpl.txt Changelog README.md ProfileTips.md
+            DESTINATION ${CMAKE_INSTALL_PREFIX})
 endif(WIN32)

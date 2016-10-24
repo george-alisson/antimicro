@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <QTextStream>
 #include <QMapIterator>
 #include <QDesktopWidget>
@@ -8,7 +25,8 @@
 #include <winextras.h>
 #endif
 
-AppLaunchHelper::AppLaunchHelper(AntiMicroSettings *settings, bool graphical, QObject *parent) :
+AppLaunchHelper::AppLaunchHelper(AntiMicroSettings *settings, bool graphical,
+                                 QObject *parent) :
     QObject(parent)
 {
     this->settings = settings;
@@ -19,9 +37,11 @@ void AppLaunchHelper::initRunMethods()
 {
     if (graphical)
     {
+        establishMouseTimerConnections();
         enablePossibleMouseSmoothing();
         changeMouseRefreshRate();
         changeSpringModeScreen();
+        changeGamepadPollRate();
 
 #ifdef Q_OS_WIN
         checkPointerPrecision();
@@ -54,6 +74,16 @@ void AppLaunchHelper::changeMouseRefreshRate()
     if (refreshRate > 0)
     {
         JoyButton::setMouseRefreshRate(refreshRate);
+    }
+}
+
+void AppLaunchHelper::changeGamepadPollRate()
+{
+    unsigned int pollRate = settings->value("GamepadPollRate",
+                                            AntiMicroSettings::defaultSDLGamepadPollRate).toUInt();
+    if (pollRate > 0)
+    {
+        JoyButton::setGamepadRefreshRate(pollRate);
     }
 }
 
@@ -103,7 +133,8 @@ void AppLaunchHelper::changeSpringModeScreen()
     if (springScreen >= deskWid.screenCount())
     {
         springScreen = -1;
-        settings->setValue("Mouse/SpringScreen", AntiMicroSettings::defaultSpringScreen);
+        settings->setValue("Mouse/SpringScreen",
+                           AntiMicroSettings::defaultSpringScreen);
         settings->sync();
     }
 
@@ -133,3 +164,18 @@ void AppLaunchHelper::appQuitPointerPrecision()
 }
 
 #endif
+
+void AppLaunchHelper::revertMouseThread()
+{
+    JoyButton::indirectStaticMouseThread(QThread::currentThread());
+}
+
+void AppLaunchHelper::changeMouseThread(QThread *thread)
+{
+    JoyButton::setStaticMouseThread(thread);
+}
+
+void AppLaunchHelper::establishMouseTimerConnections()
+{
+    JoyButton::establishMouseTimerConnections();
+}

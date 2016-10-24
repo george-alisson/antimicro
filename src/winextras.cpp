@@ -93,7 +93,7 @@ void WinExtras::populateKnownAliases()
         knownAliasesX11SymVK.insert("F10", VK_F10);
         knownAliasesX11SymVK.insert("F11", VK_F11);
         knownAliasesX11SymVK.insert("F12", VK_F12);
-        knownAliasesX11SymVK.insert("Shift_L", VK_SHIFT);
+        knownAliasesX11SymVK.insert("Shift_L", VK_LSHIFT);
         knownAliasesX11SymVK.insert("Shift_R", VK_RSHIFT);
         knownAliasesX11SymVK.insert("Insert", VK_INSERT);
         knownAliasesX11SymVK.insert("Pause", VK_PAUSE);
@@ -185,6 +185,10 @@ unsigned int WinExtras::correctVirtualKey(unsigned int scancode, unsigned int vi
         break;
     case VK_MENU:
         finalvirtual = extended ? VK_RMENU : VK_LMENU;
+        break;
+    case 0x5E:
+        // Ignore System Reserved VK
+        finalvirtual = 0;
         break;
     default:
         finalvirtual = virtualkey;
@@ -486,4 +490,13 @@ bool WinExtras::raiseProcessPriority()
     */
 
     return result;
+}
+
+QPoint WinExtras::getCursorPos()
+{
+    POINT cursorPoint;
+    GetCursorPos(&cursorPoint);
+
+    QPoint temp(cursorPoint.x, cursorPoint.y);
+    return temp;
 }

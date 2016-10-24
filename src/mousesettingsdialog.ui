@@ -3,14 +3,14 @@
  <class>MouseSettingsDialog</class>
  <widget class="QDialog" name="MouseSettingsDialog">
   <property name="windowModality">
-   <enum>Qt::NonModal</enum>
+   <enum>Qt::WindowModal</enum>
   </property>
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
     <width>587</width>
-    <height>525</height>
+    <height>612</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -160,7 +160,7 @@ a period of time using a Cubic curve.</string>
      <property name="sizeHint" stdset="0">
       <size>
        <width>20</width>
-       <height>20</height>
+       <height>10</height>
       </size>
      </property>
     </spacer>
@@ -170,7 +170,7 @@ a period of time using a Cubic curve.</string>
      <item>
       <layout class="QVBoxLayout" name="verticalLayout_8">
        <item>
-        <widget class="QGroupBox" name="groupBox">
+        <widget class="QGroupBox" name="mouseSpeedGroupBox">
          <property name="title">
           <string>Mouse Speed Settings</string>
          </property>
@@ -180,7 +180,7 @@ a period of time using a Cubic curve.</string>
          <property name="checkable">
           <bool>false</bool>
          </property>
-         <layout class="QVBoxLayout" name="verticalLayout_12">
+         <layout class="QVBoxLayout" name="mouseSpeedVerticalLayout">
           <item alignment="Qt::AlignHCenter">
            <widget class="QCheckBox" name="changeMouseSpeedsTogetherCheckBox">
             <property name="enabled">
@@ -216,7 +216,7 @@ boxes at the same time.</string>
                 <item>
                  <widget class="QLabel" name="label_5">
                   <property name="text">
-                   <string>Horizontal
+                   <string>Hori&amp;zontal
 Speed:</string>
                   </property>
                   <property name="buddy">
@@ -264,7 +264,7 @@ Speed:</string>
                 <item>
                  <widget class="QLabel" name="label_7">
                   <property name="text">
-                   <string>Vertical
+                   <string>&amp;Vertical
 Speed:</string>
                   </property>
                   <property name="buddy">
@@ -407,11 +407,11 @@ according to number of simulated notches per second.</string>
            </layout>
           </item>
           <item>
-           <layout class="QHBoxLayout" name="horizontalLayout_16">
+           <layout class="QHBoxLayout" name="senHorizontalLayout">
             <item>
-             <widget class="QLabel" name="label_6">
+             <widget class="QLabel" name="sensLabel">
               <property name="text">
-               <string>Sensitivity:</string>
+               <string>Sensitivit&amp;y:</string>
               </property>
               <property name="buddy">
                <cstring>sensitivityDoubleSpinBox</cstring>
@@ -449,9 +449,9 @@ faster at the low end of an axis.</string>
            </layout>
           </item>
           <item>
-           <layout class="QHBoxLayout" name="horizontalLayout_3">
+           <layout class="QHBoxLayout" name="easingHorizontalLayout">
             <item>
-             <widget class="QLabel" name="label_10">
+             <widget class="QLabel" name="easingDurationLabel">
               <property name="text">
                <string>Easing Duration:</string>
               </property>
@@ -469,6 +469,9 @@ faster at the low end of an axis.</string>
                <string>Specifies the amount of time (in seconds) that will
 be required before the mouse is fully accelerated
 after reaching the high end of an axis.</string>
+              </property>
+              <property name="suffix">
+               <string> s</string>
               </property>
               <property name="decimals">
                <number>2</number>
@@ -510,13 +513,19 @@ after reaching the high end of an axis.</string>
        </item>
        <item>
         <widget class="QGroupBox" name="extraAccelerationGroupBox">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
          <property name="toolTip">
-          <string>Options for adding extra acceleration to the mouse
+          <string>Options for adding more acceleration to the mouse
 movement beyond what the acceleration curve would
-produce.</string>
+produce. Acceleration is added based on how quickly an axis is
+moved in one gamepad poll. This is meant to help work around
+some of the issues of the very limited input range available
+using typical gamepad analog sticks.</string>
          </property>
          <property name="title">
-          <string>Extra Acceleration</string>
+          <string>Delta Acceleration</string>
          </property>
          <property name="flat">
           <bool>false</bool>
@@ -527,7 +536,7 @@ produce.</string>
          <property name="checked">
           <bool>false</bool>
          </property>
-         <layout class="QVBoxLayout" name="verticalLayout_13">
+         <layout class="QVBoxLayout" name="verticalLayout_12">
           <item>
            <layout class="QHBoxLayout" name="horizontalLayout_20">
             <item>
@@ -535,7 +544,7 @@ produce.</string>
               <item>
                <widget class="QLabel" name="extraAccelMultiLabel">
                 <property name="text">
-                 <string>Multiplier:</string>
+                 <string>&amp;Multiplier:</string>
                 </property>
                 <property name="buddy">
                  <cstring>extraAccelDoubleSpinBox</cstring>
@@ -581,7 +590,7 @@ produce.</string>
                  <string>Acceleration begins at this percentage of the base multiplier</string>
                 </property>
                 <property name="suffix">
-                 <string> %</string>
+                 <string>%</string>
                 </property>
                 <property name="minimum">
                  <double>0.000000000000000</double>
@@ -608,7 +617,7 @@ produce.</string>
               <item>
                <widget class="QLabel" name="minThresholdLabel">
                 <property name="text">
-                 <string>Min
+                 <string>Mi&amp;n
 Threshold:</string>
                 </property>
                 <property name="buddy">
@@ -622,7 +631,7 @@ Threshold:</string>
                  <string>Minimum amount of axis travel required for acceleration to begin</string>
                 </property>
                 <property name="suffix">
-                 <string> %</string>
+                 <string>%</string>
                 </property>
                 <property name="maximum">
                  <double>100.000000000000000</double>
@@ -653,7 +662,7 @@ Threshold:</string>
                  <string>Maximum axis travel before acceleration has reached the multiplier value</string>
                 </property>
                 <property name="suffix">
-                 <string> %</string>
+                 <string>%</string>
                 </property>
                 <property name="maximum">
                  <double>100.000000000000000</double>
@@ -664,6 +673,81 @@ Threshold:</string>
                </widget>
               </item>
              </layout>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_22">
+            <item>
+             <widget class="QLabel" name="label_11">
+              <property name="text">
+               <string>E&amp;xtra Duration:</string>
+              </property>
+              <property name="buddy">
+               <cstring>accelExtraDurationDoubleSpinBox</cstring>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDoubleSpinBox" name="accelExtraDurationDoubleSpinBox">
+              <property name="toolTip">
+               <string>Extend the time that extra acceleration is applied. Axis travel
+will be taken into account. A slower flick will decrease the
+actual time that extra acceleration will be applied.</string>
+              </property>
+              <property name="suffix">
+               <string> s</string>
+              </property>
+              <property name="minimum">
+               <double>0.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>5.000000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>0.050000000000000</double>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_16">
+            <item>
+             <widget class="QLabel" name="label_6">
+              <property name="text">
+               <string>Curve:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="extraAccelCurveComboBox">
+              <item>
+               <property name="text">
+                <string/>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Linear</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Ease Out Sine</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Ease Out Quad</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Ease Out Cubic</string>
+               </property>
+              </item>
+             </widget>
             </item>
            </layout>
           </item>
@@ -685,9 +769,6 @@ Threshold:</string>
          <layout class="QVBoxLayout" name="verticalLayout_11">
           <item>
            <layout class="QVBoxLayout" name="verticalLayout_3">
-            <property name="topMargin">
-             <number>10</number>
-            </property>
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_5">
               <item>
@@ -741,6 +822,36 @@ of your screen.</string>
                 </property>
                 <property name="maximum">
                  <number>16777215</number>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_3">
+              <item>
+               <widget class="QLabel" name="releaseSpringRadiusLabel">
+                <property name="text">
+                 <string>Release Radius:</string>
+                </property>
+                <property name="buddy">
+                 <cstring>releaseSpringRadiusspinBox</cstring>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QSpinBox" name="releaseSpringRadiusspinBox">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="toolTip">
+                 <string/>
+                </property>
+                <property name="suffix">
+                 <string>%</string>
+                </property>
+                <property name="maximum">
+                 <number>100</number>
                 </property>
                </widget>
               </item>

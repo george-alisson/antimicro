@@ -1,3 +1,20 @@
+﻿/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 #include <QTime>
 #include <QTimer>
@@ -6,11 +23,15 @@
 
 #include "inputdaemon.h"
 #include "logger.h"
+#include "common.h"
 
 const int InputDaemon::GAMECONTROLLERTRIGGERRELEASE = 16384;
 
-InputDaemon::InputDaemon(QMap<SDL_JoystickID, InputDevice*> *joysticks, AntiMicroSettings *settings, bool graphical, QObject *parent) :
-    QObject(parent)
+InputDaemon::InputDaemon(QMap<SDL_JoystickID, InputDevice*> *joysticks,
+                         AntiMicroSettings *settings,
+                         bool graphical, QObject *parent) :
+    QObject(parent),
+    pollResetTimer(this)
 {
     this->joysticks = joysticks;
     this->stopped = false;
@@ -18,22 +39,41 @@ InputDaemon::InputDaemon(QMap<SDL_JoystickID, InputDevice*> *joysticks, AntiMicr
     this->settings = settings;
 
     eventWorker = new SDLEventReader(joysticks, settings);
-    thread = new QThread();
-    eventWorker->moveToThread(thread);
+    refreshJoysticks();
+
+    sdlWorkerThread = 0;
+    if (graphical)
+    {
+        sdlWorkerThread = new QThread();
+        eventWorker->moveToThread(sdlWorkerThread);
+    }
 
     if (graphical)
     {
-        connect(thread, SIGNAL(started()), eventWorker, SLOT(performWork()));
+        connect(sdlWorkerThread, SIGNAL(started()), eventWorker, SLOT(performWork()));
         connect(eventWorker, SIGNAL(eventRaised()), this, SLOT(run()));
+
+        connect(JoyButton::getMouseHelper(), SIGNAL(gamepadRefreshRateUpdated(uint)),
+                eventWorker, SLOT(updatePollRate(uint)));
+
+        connect(JoyButton::getMouseHelper(), SIGNAL(gamepadRefreshRateUpdated(uint)),
+                this, SLOT(updatePollResetRate(uint)));
+        connect(JoyButton::getMouseHelper(), SIGNAL(mouseRefreshRateUpdated(uint)),
+                this, SLOT(updatePollResetRate(uint)));
+
         // Timer in case SDL does not produce an axis event during a joystick
         // poll.
-        //pollResetTimer.setSingleShot(true);
-        pollResetTimer.setInterval(11);
-        connect(&pollResetTimer, SIGNAL(timeout()), this, SLOT(resetActiveButtonMouseDistances()));
-        thread->start();
-    }
+        pollResetTimer.setSingleShot(true);
+        pollResetTimer.setInterval(
+                    qMax(JoyButton::getMouseRefreshRate(),
+                         JoyButton::getGamepadRefreshRate()) + 1);
 
-    refreshJoysticks();
+        connect(&pollResetTimer, SIGNAL(timeout()), this,
+                SLOT(resetActiveButtonMouseDistances()));
+
+        //sdlWorkerThread->start(QThread::HighPriority);
+        //QMetaObject::invokeMethod(eventWorker, "performWork", Qt::QueuedConnection);
+    }
 }
 
 InputDaemon::~InputDaemon()
@@ -43,51 +83,52 @@ InputDaemon::~InputDaemon()
         quit();
     }
 
-    if (thread)
+    if (sdlWorkerThread)
     {
-        thread->quit();
-        thread->wait();
-        delete thread;
-        thread = 0;
+        sdlWorkerThread->quit();
+        sdlWorkerThread->wait();
+        delete sdlWorkerThread;
+        sdlWorkerThread = 0;
     }
 }
 
 void InputDaemon::startWorker()
 {
-    if (!thread->isRunning())
+    if (!sdlWorkerThread->isRunning())
     {
-        connect(thread, SIGNAL(started()), eventWorker, SLOT(performWork()));
-        connect(eventWorker, SIGNAL(eventRaised()), this, SLOT(run()));
-        thread->start();
-        pollResetTimer.start();
+        sdlWorkerThread->start(QThread::HighPriority);
+        //pollResetTimer.start();
     }
 }
 
 void InputDaemon::run ()
 {
-    //SDL_Event event;
+    PadderCommon::inputDaemonMutex.lock();
 
     // SDL has found events. The timeout is not necessary.
     pollResetTimer.stop();
 
     if (!stopped)
     {
-        //Logger::LogInfo("Gamepad Poll");
+        //Logger::LogInfo(QString("Gamepad Poll %1").arg(QTime::currentTime().toString("hh:mm:ss.zzz")));
         JoyButton::resetActiveButtonMouseDistances();
 
         QQueue<SDL_Event> sdlEventQueue;
 
         firstInputPass(&sdlEventQueue);
+
+#ifdef USE_SDL_2
         modifyUnplugEvents(&sdlEventQueue);
+#endif
+
         secondInputPass(&sdlEventQueue);
 
         clearBitArrayStatusInstances();
     }
 
-    //qDebug() << QTime::currentTime() << ": " << "END";
     if (stopped)
     {
-        if (joysticks->count() > 0)
+        if (joysticks->size() > 0)
         {
             emit complete(joysticks->value(0));
         }
@@ -99,6 +140,8 @@ void InputDaemon::run ()
         QTimer::singleShot(0, eventWorker, SLOT(performWork()));
         pollResetTimer.start();
     }
+
+    PadderCommon::inputDaemonMutex.unlock();
 }
 
 void InputDaemon::refreshJoysticks()
@@ -119,9 +162,8 @@ void InputDaemon::refreshJoysticks()
 #ifdef USE_SDL_2
     trackjoysticks.clear();
     trackcontrollers.clear();
-#endif
 
-#ifdef USE_SDL_2
+    settings->getLock()->lock();
     settings->beginGroup("Mappings");
 #endif
 
@@ -129,60 +171,192 @@ void InputDaemon::refreshJoysticks()
     {
 #ifdef USE_SDL_2
 
-        SDL_Joystick *joystick = SDL_JoystickOpen(i);
+        int index = i;
 
-        QString temp;
-        SDL_JoystickGUID tempGUID = SDL_JoystickGetGUID(joystick);
-        char guidString[65] = {'0'};
-        SDL_JoystickGetGUIDString(tempGUID, guidString, sizeof(guidString));
-        temp = QString(guidString);
-
-        bool disableGameController = settings->value(QString("%1Disable").arg(temp), false).toBool();
-
-        if (SDL_IsGameController(i) && !disableGameController)
+        // Check if device is considered a Game Controller at the start.
+        if (SDL_IsGameController(index))
         {
-            SDL_GameController *controller = SDL_GameControllerOpen(i);
-            GameController *damncontroller = new GameController(controller, i, settings, this);
-            SDL_Joystick *sdlStick = SDL_GameControllerGetJoystick(controller);
-            SDL_JoystickID joystickID = SDL_JoystickInstanceID(sdlStick);
-            joysticks->insert(joystickID, damncontroller);
-            trackcontrollers.insert(joystickID, damncontroller);
+            SDL_GameController *controller = SDL_GameControllerOpen(index);
+            if (controller)
+            {
+                SDL_Joystick *sdlStick = SDL_GameControllerGetJoystick(controller);
+                SDL_JoystickID tempJoystickID = SDL_JoystickInstanceID(sdlStick);
+
+                // Check if device has already been grabbed.
+                if (!joysticks->contains(tempJoystickID))
+                {
+                    //settings->getLock()->lock();
+                    //settings->beginGroup("Mappings");
+
+                    QString temp;
+                    SDL_JoystickGUID tempGUID = SDL_JoystickGetGUID(sdlStick);
+                    char guidString[65] = {'0'};
+                    SDL_JoystickGetGUIDString(tempGUID, guidString, sizeof(guidString));
+                    temp = QString(guidString);
+
+                    bool disableGameController = settings->value(QString("%1Disable").arg(temp), false).toBool();
+
+                    //settings->endGroup();
+                    //settings->getLock()->unlock();
+
+                    // Check if user has designated device Joystick mode.
+                    if (!disableGameController)
+                    {
+                        GameController *damncontroller = new GameController(controller, index, settings, this);
+                        connect(damncontroller, SIGNAL(requestWait()), eventWorker, SLOT(haltServices()));
+                        joysticks->insert(tempJoystickID, damncontroller);
+                        trackcontrollers.insert(tempJoystickID, damncontroller);
+
+                        emit deviceAdded(damncontroller);
+                    }
+                    else
+                    {
+                        // Check if joystick is considered connected.
+                        /*SDL_Joystick *joystick = SDL_JoystickOpen(index);
+                        if (joystick)
+                        {
+                            SDL_JoystickID tempJoystickID = SDL_JoystickInstanceID(joystick);
+
+                            Joystick *curJoystick = new Joystick(joystick, index, settings, this);
+                            joysticks->insert(tempJoystickID, curJoystick);
+                            trackjoysticks.insert(tempJoystickID, curJoystick);
+
+                            emit deviceAdded(curJoystick);
+                        }
+                        */
+                        Joystick *joystick = openJoystickDevice(index);
+                        if (joystick)
+                        {
+                            emit deviceAdded(joystick);
+                        }
+
+                    }
+                }
+                else
+                {
+                    // Make sure to decrement reference count
+                    SDL_GameControllerClose(controller);
+                }
+            }
         }
         else
         {
-            Joystick *curJoystick = new Joystick(joystick, i, settings, this);
-            SDL_JoystickID joystickID = SDL_JoystickInstanceID(joystick);
-            joysticks->insert(joystickID, curJoystick);
-            trackjoysticks.insert(joystickID, curJoystick);
+            // Check if joystick is considered connected.
+            /*SDL_Joystick *joystick = SDL_JoystickOpen(index);
+            if (joystick)
+            {
+                SDL_JoystickID tempJoystickID = SDL_JoystickInstanceID(joystick);
+
+                Joystick *curJoystick = new Joystick(joystick, index, settings, this);
+                joysticks->insert(tempJoystickID, curJoystick);
+                trackjoysticks.insert(tempJoystickID, curJoystick);
+
+                emit deviceAdded(curJoystick);
+            }
+            */
+            Joystick *joystick = openJoystickDevice(index);
+            if (joystick)
+            {
+                emit deviceAdded(joystick);
+            }
         }
+
+
+
+        /*SDL_Joystick *joystick = SDL_JoystickOpen(i);
+        if (joystick)
+        {
+            QString temp;
+            SDL_JoystickGUID tempGUID = SDL_JoystickGetGUID(joystick);
+            char guidString[65] = {'0'};
+            SDL_JoystickGetGUIDString(tempGUID, guidString, sizeof(guidString));
+            temp = QString(guidString);
+
+            bool disableGameController = settings->value(QString("%1Disable").arg(temp), false).toBool();
+
+            if (SDL_IsGameController(i) && !disableGameController)
+            {
+                SDL_GameController *controller = SDL_GameControllerOpen(i);
+                GameController *damncontroller = new GameController(controller, i, settings, this);
+                connect(damncontroller, SIGNAL(requestWait()), eventWorker, SLOT(haltServices()));
+                SDL_Joystick *sdlStick = SDL_GameControllerGetJoystick(controller);
+                SDL_JoystickID joystickID = SDL_JoystickInstanceID(sdlStick);
+                joysticks->insert(joystickID, damncontroller);
+                trackcontrollers.insert(joystickID, damncontroller);
+            }
+            else
+            {
+                Joystick *curJoystick = new Joystick(joystick, i, settings, this);
+                connect(curJoystick, SIGNAL(requestWait()), eventWorker, SLOT(haltServices()));
+                SDL_JoystickID joystickID = SDL_JoystickInstanceID(joystick);
+                joysticks->insert(joystickID, curJoystick);
+                trackjoysticks.insert(joystickID, curJoystick);
+            }
+        }
+        */
+
 #else
         SDL_Joystick *joystick = SDL_JoystickOpen(i);
-        Joystick *curJoystick = new Joystick(joystick, i, settings, this);
-        joysticks->insert(i, curJoystick);
+        if (joystick)
+        {
+            Joystick *curJoystick = new Joystick(joystick, i, settings, this);
+            connect(curJoystick, SIGNAL(requestWait()), eventWorker, SLOT(haltServices()));
+            joysticks->insert(i, curJoystick);
+        }
+
 #endif
     }
 
 #ifdef USE_SDL_2
     settings->endGroup();
+    settings->getLock()->unlock();
 #endif
 
     emit joysticksRefreshed(joysticks);
 }
 
+void InputDaemon::deleteJoysticks()
+{
+    QMapIterator<SDL_JoystickID, InputDevice*> iter(*joysticks);
+
+    while (iter.hasNext())
+    {
+        InputDevice *joystick = iter.next().value();
+        if (joystick)
+        {
+            delete joystick;
+            joystick = 0;
+        }
+    }
+
+    joysticks->clear();
+#ifdef USE_SDL_2
+    trackjoysticks.clear();
+    trackcontrollers.clear();
+#endif
+}
+
 void InputDaemon::stop()
 {
     stopped = true;
+    pollResetTimer.stop();
 }
 
 void InputDaemon::refresh()
 {
     stop();
 
-    eventWorker->refresh();
+    Logger::LogInfo("Refreshing joystick list");
 
     QEventLoop q;
     connect(eventWorker, SIGNAL(sdlStarted()), &q, SLOT(quit()));
-    q.exec();
+    QMetaObject::invokeMethod(eventWorker, "refresh", Qt::BlockingQueuedConnection);
+
+    if (eventWorker->isSDLOpen())
+    {
+        q.exec();
+    }
+
     disconnect(eventWorker, SIGNAL(sdlStarted()), &q, SLOT(quit()));
 
     pollResetTimer.stop();
@@ -194,7 +368,9 @@ void InputDaemon::refresh()
     q.exec();
 
     refreshJoysticks();
-    QTimer::singleShot(0, eventWorker, SLOT(performWork()));
+    QTimer::singleShot(100, eventWorker, SLOT(performWork()));
+
+    stopped = false;
 }
 
 void InputDaemon::refreshJoystick(InputDevice *joystick)
@@ -207,32 +383,26 @@ void InputDaemon::refreshJoystick(InputDevice *joystick)
 void InputDaemon::quit()
 {
     stopped = true;
+    pollResetTimer.stop();
+
     disconnect(eventWorker, SIGNAL(eventRaised()), this, 0);
 
     // Wait for SDL to finish. Let worker destructor close SDL.
     // Let InputDaemon destructor close thread instance.
     if (graphical)
     {
-        QEventLoop q;
-        QTimer temptime;
-
-        connect(eventWorker, SIGNAL(eventRaised()), &q, SLOT(quit()));
-        connect(&temptime, SIGNAL(timeout()), &q, SLOT(quit()));
-
-        eventWorker->stop();
-        temptime.start(500);
-        if (eventWorker->isSDLOpen())
-        {
-            q.exec();
-        }
-        temptime.stop();
+        QMetaObject::invokeMethod(eventWorker, "stop");
+        QMetaObject::invokeMethod(eventWorker, "quit");
+        QMetaObject::invokeMethod(eventWorker, "deleteLater", Qt::BlockingQueuedConnection);
+        //QMetaObject::invokeMethod(eventWorker, "deleteLater");
     }
     else
     {
         eventWorker->stop();
+        eventWorker->quit();
+        delete eventWorker;
     }
 
-    delete eventWorker;
     eventWorker = 0;
 }
 
@@ -245,6 +415,7 @@ void InputDaemon::refreshMapping(QString mapping, InputDevice *device)
     {
         SDL_Joystick *joystick = SDL_JoystickOpen(i);
         SDL_JoystickID joystickID = SDL_JoystickInstanceID(joystick);
+
         if (device->getSDLJoystickID() == joystickID)
         {
             found = true;
@@ -271,6 +442,7 @@ void InputDaemon::refreshMapping(QString mapping, InputDevice *device)
 
                     SDL_GameController *controller = SDL_GameControllerOpen(i);
                     GameController *damncontroller = new GameController(controller, i, settings, this);
+                    connect(damncontroller, SIGNAL(requestWait()), eventWorker, SLOT(haltServices()));
                     SDL_Joystick *sdlStick = SDL_GameControllerGetJoystick(controller);
                     joystickID = SDL_JoystickInstanceID(sdlStick);
                     joysticks->insert(joystickID, damncontroller);
@@ -279,6 +451,9 @@ void InputDaemon::refreshMapping(QString mapping, InputDevice *device)
                 }
             }
         }
+
+        // Make sure to decrement reference count
+        SDL_JoystickClose(joystick);
     }
 }
 
@@ -295,7 +470,6 @@ void InputDaemon::removeDevice(InputDevice *device)
         refreshIndexes();
 
         emit deviceRemoved(deviceID);
-        device->deleteLater();
     }
 }
 
@@ -305,6 +479,9 @@ void InputDaemon::refreshIndexes()
     {
         SDL_Joystick *joystick = SDL_JoystickOpen(i);
         SDL_JoystickID joystickID = SDL_JoystickInstanceID(joystick);
+        // Make sure to decrement reference count
+        SDL_JoystickClose(joystick);
+
         InputDevice *tempdevice = joysticks->value(joystickID);
         if (tempdevice)
         {
@@ -315,13 +492,114 @@ void InputDaemon::refreshIndexes()
 
 void InputDaemon::addInputDevice(int index)
 {
-    SDL_Joystick *joystick = SDL_JoystickOpen(index);
+    // Check if device is considered a Game Controller at the start.
+    if (SDL_IsGameController(index))
+    {
+        SDL_GameController *controller = SDL_GameControllerOpen(index);
+        if (controller)
+        {
+            SDL_Joystick *sdlStick = SDL_GameControllerGetJoystick(controller);
+            SDL_JoystickID tempJoystickID = SDL_JoystickInstanceID(sdlStick);
+
+            // Check if device has already been grabbed.
+            if (!joysticks->contains(tempJoystickID))
+            {
+                settings->getLock()->lock();
+                settings->beginGroup("Mappings");
+
+                QString temp;
+                SDL_JoystickGUID tempGUID = SDL_JoystickGetGUID(sdlStick);
+                char guidString[65] = {'0'};
+                SDL_JoystickGetGUIDString(tempGUID, guidString, sizeof(guidString));
+                temp = QString(guidString);
+
+                bool disableGameController = settings->value(QString("%1Disable").arg(temp), false).toBool();
+
+                settings->endGroup();
+                settings->getLock()->unlock();
+
+                // Check if user has designated device Joystick mode.
+                if (!disableGameController)
+                {
+                    GameController *damncontroller = new GameController(controller, index, settings, this);
+                    connect(damncontroller, SIGNAL(requestWait()), eventWorker, SLOT(haltServices()));
+                    joysticks->insert(tempJoystickID, damncontroller);
+                    trackcontrollers.insert(tempJoystickID, damncontroller);
+
+                    Logger::LogInfo(QString("New game controller found - #%1 [%2]")
+                                    .arg(index+1)
+                                    .arg(QTime::currentTime().toString("hh:mm:ss.zzz")));
+
+                    emit deviceAdded(damncontroller);
+                }
+                else
+                {
+                    // Check if joystick is considered connected.
+                    /*SDL_Joystick *joystick = SDL_JoystickOpen(index);
+                    if (joystick)
+                    {
+                        SDL_JoystickID tempJoystickID = SDL_JoystickInstanceID(joystick);
+
+                        Joystick *curJoystick = new Joystick(joystick, index, settings, this);
+                        joysticks->insert(tempJoystickID, curJoystick);
+                        trackjoysticks.insert(tempJoystickID, curJoystick);
+
+                        emit deviceAdded(curJoystick);
+                    }
+                    */
+                    Joystick *joystick = openJoystickDevice(index);
+                    if (joystick)
+                    {
+                        Logger::LogInfo(QString("New joystick found - #%1 [%2]")
+                                        .arg(index+1)
+                                        .arg(QTime::currentTime().toString("hh:mm:ss.zzz")));
+
+                        emit deviceAdded(joystick);
+                    }
+
+                }
+            }
+            else
+            {
+                // Make sure to decrement reference count
+                SDL_GameControllerClose(controller);
+            }
+        }
+    }
+    else
+    {
+        // Check if joystick is considered connected.
+        /*SDL_Joystick *joystick = SDL_JoystickOpen(index);
+        if (joystick)
+        {
+            SDL_JoystickID tempJoystickID = SDL_JoystickInstanceID(joystick);
+
+            Joystick *curJoystick = new Joystick(joystick, index, settings, this);
+            joysticks->insert(tempJoystickID, curJoystick);
+            trackjoysticks.insert(tempJoystickID, curJoystick);
+
+            emit deviceAdded(curJoystick);
+        }
+        */
+        Joystick *joystick = openJoystickDevice(index);
+        if (joystick)
+        {
+            Logger::LogInfo(QString("New joystick found - #%1 [%2]")
+                            .arg(index+1)
+                            .arg(QTime::currentTime().toString("hh:mm:ss.zzz")));
+
+            emit deviceAdded(joystick);
+        }
+    }
+
+    /*SDL_Joystick *joystick = SDL_JoystickOpen(index);
     if (joystick)
     {
         SDL_JoystickID tempJoystickID = SDL_JoystickInstanceID(joystick);
 
         if (!joysticks->contains(tempJoystickID))
         {
+            settings->getLock()->lock();
             settings->beginGroup("Mappings");
 
             QString temp;
@@ -334,6 +612,9 @@ void InputDaemon::addInputDevice(int index)
 
             if (SDL_IsGameController(index) && !disableGameController)
             {
+                // Make sure to decrement reference count
+                SDL_JoystickClose(joystick);
+
                 SDL_GameController *controller = SDL_GameControllerOpen(index);
                 if (controller)
                 {
@@ -342,10 +623,12 @@ void InputDaemon::addInputDevice(int index)
                     if (!joysticks->contains(tempJoystickID))
                     {
                         GameController *damncontroller = new GameController(controller, index, settings, this);
+                        connect(damncontroller, SIGNAL(requestWait()), eventWorker, SLOT(haltServices()));
                         joysticks->insert(tempJoystickID, damncontroller);
                         trackcontrollers.insert(tempJoystickID, damncontroller);
 
                         settings->endGroup();
+                        settings->getLock()->unlock();
 
                         emit deviceAdded(damncontroller);
                     }
@@ -353,6 +636,7 @@ void InputDaemon::addInputDevice(int index)
                 else
                 {
                     settings->endGroup();
+                    settings->getLock()->unlock();
                 }
             }
             else
@@ -362,17 +646,43 @@ void InputDaemon::addInputDevice(int index)
                 trackjoysticks.insert(tempJoystickID, curJoystick);
 
                 settings->endGroup();
+                settings->getLock()->unlock();
 
                 emit deviceAdded(curJoystick);
             }
         }
+        else
+        {
+            // Make sure to decrement reference count
+            SDL_JoystickClose(joystick);
+        }
     }
+    */
+}
+
+Joystick *InputDaemon::openJoystickDevice(int index)
+{
+    // Check if joystick is considered connected.
+    SDL_Joystick *joystick = SDL_JoystickOpen(index);
+    Joystick *curJoystick = 0;
+    if (joystick)
+    {
+        SDL_JoystickID tempJoystickID = SDL_JoystickInstanceID(joystick);
+
+        curJoystick = new Joystick(joystick, index, settings, this);
+        joysticks->insert(tempJoystickID, curJoystick);
+        trackjoysticks.insert(tempJoystickID, curJoystick);
+
+    }
+
+    return curJoystick;
 }
 
 #endif
 
-InputDeviceBitArrayStatus* InputDaemon::createOrGrabBitStatusEntry(QHash<InputDevice *, InputDeviceBitArrayStatus *> *statusHash,
-                                                                   InputDevice *device, bool readCurrent)
+InputDeviceBitArrayStatus*
+InputDaemon::createOrGrabBitStatusEntry(QHash<InputDevice *, InputDeviceBitArrayStatus *> *statusHash,
+                                        InputDevice *device, bool readCurrent)
 {
     InputDeviceBitArrayStatus *bitArrayStatus = 0;
 
@@ -412,8 +722,8 @@ void InputDaemon::firstInputPass(QQueue<SDL_Event> *sdlEventQueue)
 
                     if (button)
                     {
-                        InputDeviceBitArrayStatus *temp = createOrGrabBitStatusEntry(&releaseEventsGenerated, joy, false);
-                        temp->changeButtonStatus(event.jbutton.button, event.type == SDL_JOYBUTTONUP);
+                        //InputDeviceBitArrayStatus *temp = createOrGrabBitStatusEntry(&releaseEventsGenerated, joy, false);
+                        //temp->changeButtonStatus(event.jbutton.button, event.type == SDL_JOYBUTTONUP);
 
                         InputDeviceBitArrayStatus *pending = createOrGrabBitStatusEntry(&pendingEventValues, joy);
                         pending->changeButtonStatus(event.jbutton.button,
@@ -421,6 +731,12 @@ void InputDaemon::firstInputPass(QQueue<SDL_Event> *sdlEventQueue)
                         sdlEventQueue->append(event);
                     }
                 }
+#ifdef USE_SDL_2
+                else
+                {
+                    sdlEventQueue->append(event);
+                }
+#endif
 
                 break;
             }
@@ -446,6 +762,12 @@ void InputDaemon::firstInputPass(QQueue<SDL_Event> *sdlEventQueue)
                         sdlEventQueue->append(event);
                     }
                 }
+#ifdef USE_SDL_2
+                else
+                {
+                    sdlEventQueue->append(event);
+                }
+#endif
 
                 break;
             }
@@ -463,14 +785,20 @@ void InputDaemon::firstInputPass(QQueue<SDL_Event> *sdlEventQueue)
 
                     if (dpad)
                     {
-                        InputDeviceBitArrayStatus *temp = createOrGrabBitStatusEntry(&releaseEventsGenerated, joy, false);
-                        temp->changeHatStatus(event.jhat.hat, event.jhat.value == 0);
+                        //InputDeviceBitArrayStatus *temp = createOrGrabBitStatusEntry(&releaseEventsGenerated, joy, false);
+                        //temp->changeHatStatus(event.jhat.hat, event.jhat.value == 0);
 
                         InputDeviceBitArrayStatus *pending = createOrGrabBitStatusEntry(&pendingEventValues, joy);
                         pending->changeHatStatus(event.jhat.hat, event.jhat.value != 0 ? true : false);
                         sdlEventQueue->append(event);
                     }
                 }
+#ifdef USE_SDL_2
+                else
+                {
+                    sdlEventQueue->append(event);
+                }
+#endif
 
                 break;
             }
@@ -515,8 +843,8 @@ void InputDaemon::firstInputPass(QQueue<SDL_Event> *sdlEventQueue)
 
                     if (button)
                     {
-                        InputDeviceBitArrayStatus *temp = createOrGrabBitStatusEntry(&releaseEventsGenerated, joy, false);
-                        temp->changeButtonStatus(event.cbutton.button, event.type == SDL_CONTROLLERBUTTONUP);
+                        //InputDeviceBitArrayStatus *temp = createOrGrabBitStatusEntry(&releaseEventsGenerated, joy, false);
+                        //temp->changeButtonStatus(event.cbutton.button, event.type == SDL_CONTROLLERBUTTONUP);
 
                         InputDeviceBitArrayStatus *pending = createOrGrabBitStatusEntry(&pendingEventValues, joy);
                         pending->changeButtonStatus(event.cbutton.button,
@@ -543,6 +871,7 @@ void InputDaemon::firstInputPass(QQueue<SDL_Event> *sdlEventQueue)
     }
 }
 
+#ifdef USE_SDL_2
 void InputDaemon::modifyUnplugEvents(QQueue<SDL_Event> *sdlEventQueue)
 {
     QHashIterator<InputDevice*, InputDeviceBitArrayStatus*> genIter(releaseEventsGenerated);
@@ -557,7 +886,7 @@ void InputDaemon::modifyUnplugEvents(QQueue<SDL_Event> *sdlEventQueue)
         unsigned int bitArraySize = tempBitArray.size();
         //qDebug() << "ARRAY SIZE: " << bitArraySize;
 
-        if (bitArraySize > 0 && tempBitArray.count(true) == bitArraySize)
+        if (bitArraySize > 0 && tempBitArray.count(true) == device->getNumberAxes())
         {
             if (pendingEventValues.contains(device))
             {
@@ -589,11 +918,7 @@ void InputDaemon::modifyUnplugEvents(QQueue<SDL_Event> *sdlEventQueue)
                                 }
                                 else
                                 {
-#ifdef USE_SDL_2
                                     InputDevice *joy = trackjoysticks.value(event.jaxis.which);
-#else
-                                    InputDevice *joy = joysticks->value(event.jaxis.which);
-#endif
 
                                     if (joy)
                                     {
@@ -617,7 +942,6 @@ void InputDaemon::modifyUnplugEvents(QQueue<SDL_Event> *sdlEventQueue)
                                 tempQueue.enqueue(event);
                                 break;
                             }
-#ifdef USE_SDL_2
                             case SDL_CONTROLLERAXISMOTION:
                             {
                                 if (event.caxis.which != device->getSDLJoystickID())
@@ -659,7 +983,6 @@ void InputDaemon::modifyUnplugEvents(QQueue<SDL_Event> *sdlEventQueue)
                                 tempQueue.enqueue(event);
                                 break;
                             }
-#endif
                             default:
                             {
                                 tempQueue.enqueue(event);
@@ -673,7 +996,9 @@ void InputDaemon::modifyUnplugEvents(QQueue<SDL_Event> *sdlEventQueue)
         }
     }
 }
+#endif
 
+#ifdef USE_SDL_2
 QBitArray InputDaemon::createUnplugEventBitArray(InputDevice *device)
 {
     InputDeviceBitArrayStatus tempStatus(device, false);
@@ -690,6 +1015,7 @@ QBitArray InputDaemon::createUnplugEventBitArray(InputDevice *device)
     QBitArray unplugBitArray = tempStatus.generateFinalBitArray();
     return unplugBitArray;
 }
+#endif
 
 void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
 {
@@ -717,7 +1043,8 @@ void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
 
                     if (button)
                     {
-                        button->joyEvent(event.type == SDL_JOYBUTTONDOWN ? true : false);
+                        //button->joyEvent(event.type == SDL_JOYBUTTONDOWN ? true : false);
+                        button->queuePendingEvent(event.type == SDL_JOYBUTTONDOWN ? true : false);
 
                         if (!activeDevices.contains(event.jbutton.which))
                         {
@@ -725,6 +1052,13 @@ void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
                         }
                     }
                 }
+#ifdef USE_SDL_2
+                else if (trackcontrollers.contains(event.jbutton.which))
+                {
+                    GameController *gamepad = trackcontrollers.value(event.jbutton.which);
+                    gamepad->rawButtonEvent(event.jbutton.button, event.type == SDL_JOYBUTTONDOWN ? true : false);
+                }
+#endif
 
                 break;
             }
@@ -742,14 +1076,24 @@ void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
                     JoyAxis *axis = set->getJoyAxis(event.jaxis.axis);
                     if (axis)
                     {
-                        axis->joyEvent(event.jaxis.value);
+                        //axis->joyEvent(event.jaxis.value);
+                        axis->queuePendingEvent(event.jaxis.value);
 
                         if (!activeDevices.contains(event.jaxis.which))
                         {
                             activeDevices.insert(event.jaxis.which, joy);
                         }
                     }
+
+                    joy->rawAxisEvent(event.jaxis.which, event.jaxis.value);
                 }
+#ifdef USE_SDL_2
+                else if (trackcontrollers.contains(event.jaxis.which))
+                {
+                    GameController *gamepad = trackcontrollers.value(event.jaxis.which);
+                    gamepad->rawAxisEvent(event.jaxis.axis, event.jaxis.value);
+                }
+#endif
 
                 break;
             }
@@ -767,6 +1111,7 @@ void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
                     JoyDPad *dpad = set->getJoyDPad(event.jhat.hat);
                     if (dpad)
                     {
+                        //dpad->joyEvent(event.jhat.value);
                         dpad->joyEvent(event.jhat.value);
 
                         if (!activeDevices.contains(event.jhat.which))
@@ -775,6 +1120,13 @@ void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
                         }
                     }
                 }
+#ifdef USE_SDL_2
+                else if (trackcontrollers.contains(event.jhat.which))
+                {
+                    GameController *gamepad = trackcontrollers.value(event.jaxis.which);
+                    gamepad->rawDPadEvent(event.jhat.hat, event.jhat.value);
+                }
+#endif
 
                 break;
             }
@@ -791,7 +1143,8 @@ void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
                     {
                         //qDebug() << QTime::currentTime() << ": " << "Axis " << event.caxis.axis+1
                         //         << ": " << event.caxis.value;
-                        axis->joyEvent(event.caxis.value);
+                        //axis->joyEvent(event.caxis.value);
+                        axis->queuePendingEvent(event.caxis.value);
 
                         if (!activeDevices.contains(event.caxis.which))
                         {
@@ -813,7 +1166,8 @@ void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
 
                     if (button)
                     {
-                        button->joyEvent(event.type == SDL_CONTROLLERBUTTONDOWN ? true : false);
+                        //button->joyEvent(event.type == SDL_CONTROLLERBUTTONDOWN ? true : false);
+                        button->queuePendingEvent(event.type == SDL_CONTROLLERBUTTONDOWN ? true : false);
 
                         if (!activeDevices.contains(event.cbutton.which))
                         {
@@ -830,7 +1184,11 @@ void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
                 InputDevice *device = joysticks->value(event.jdevice.which);
                 if (device)
                 {
-                    Logger::LogInfo(QString("Removing joystick #%1").arg(device->getRealJoyNumber()));
+                    Logger::LogInfo(QString("Removing joystick #%1 [%2]")
+                                    .arg(device->getRealJoyNumber())
+                                    .arg(QTime::currentTime().toString("hh:mm:ss.zzz")));
+
+                    //activeDevices.remove(event.jdevice.which);
                     removeDevice(device);
                 }
 
@@ -839,7 +1197,6 @@ void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
 
             case SDL_JOYDEVICEADDED:
             {
-                Logger::LogInfo(QString("New joystick found - #%1").arg(event.jdevice.which+1));
                 addInputDevice(event.jdevice.which);
                 break;
             }
@@ -855,13 +1212,22 @@ void InputDaemon::secondInputPass(QQueue<SDL_Event> *sdlEventQueue)
                 break;
         }
 
-        // Active possible queued stick and vdpad events.
+        // Active possible queued events.
         QHashIterator<SDL_JoystickID, InputDevice*> activeDevIter(activeDevices);
         while (activeDevIter.hasNext())
         {
             InputDevice *tempDevice = activeDevIter.next().value();
             tempDevice->activatePossibleControlStickEvents();
+            tempDevice->activatePossibleAxisEvents();
+            tempDevice->activatePossibleDPadEvents();
             tempDevice->activatePossibleVDPadEvents();
+            tempDevice->activatePossibleButtonEvents();
+        }
+
+        if (JoyButton::shouldInvokeMouseEvents())
+        {
+            // Do not wait for next event loop run. Execute immediately.
+            JoyButton::invokeMouseEvents();
         }
     }
 }
@@ -897,5 +1263,25 @@ void InputDaemon::clearBitArrayStatusInstances()
 
 void InputDaemon::resetActiveButtonMouseDistances()
 {
+    pollResetTimer.stop();
+
     JoyButton::resetActiveButtonMouseDistances();
+}
+
+void InputDaemon::updatePollResetRate(unsigned int tempPollRate)
+{
+    Q_UNUSED(tempPollRate);
+
+
+    bool wasActive = pollResetTimer.isActive();
+    pollResetTimer.stop();
+
+    pollResetTimer.setInterval(
+                qMax(JoyButton::getMouseRefreshRate(),
+                     JoyButton::getGamepadRefreshRate()) + 1);
+
+    if (wasActive)
+    {
+        pollResetTimer.start();
+    }
 }

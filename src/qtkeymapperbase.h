@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #ifndef QTKEYMAPPERBASE_H
 #define QTKEYMAPPERBASE_H
 
@@ -10,9 +27,17 @@ class QtKeyMapperBase : public QObject
 public:
     explicit QtKeyMapperBase(QObject *parent = 0);
 
+    typedef struct _charKeyInformation
+    {
+        Qt::KeyboardModifiers modifiers;
+        unsigned int virtualkey;
+    } charKeyInformation;
+
     virtual unsigned int returnVirtualKey(unsigned int qkey);
     virtual unsigned int returnQtKey(unsigned int key, unsigned int scancode=0);
     virtual bool isModifier(unsigned int qkey);
+    charKeyInformation getCharKeyInformation(QChar value);
+    QString getIdentifier();
 
     static const unsigned int customQtKeyPrefix = 0x10000000;
     static const unsigned int customKeyPrefix = 0x20000000;
@@ -54,9 +79,13 @@ public:
 
 protected:
     virtual void populateMappingHashes() = 0;
+    virtual void populateCharKeyInformation() = 0;
 
     QHash<unsigned int, unsigned int> qtKeyToVirtualKey;
     QHash<unsigned int, unsigned int> virtualKeyToQtKey;
+    // Unicode representation -> VK+Modifier information
+    QHash<unsigned int, charKeyInformation> virtualkeyToCharKeyInformation;
+    QString identifier;
 
 signals:
 

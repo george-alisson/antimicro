@@ -55,7 +55,7 @@
         <bool>false</bool>
        </property>
        <property name="currentRow">
-        <number>-1</number>
+        <number>0</number>
        </property>
        <item>
         <property name="text">
@@ -91,14 +91,11 @@
        </property>
        <widget class="QWidget" name="General">
         <layout class="QVBoxLayout" name="verticalLayout_3">
-         <property name="spacing">
-          <number>8</number>
-         </property>
-         <property name="leftMargin">
-          <number>10</number>
-         </property>
          <property name="topMargin">
           <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>9</number>
          </property>
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_3">
@@ -108,7 +105,7 @@
            <item>
             <widget class="QLabel" name="label_2">
              <property name="text">
-              <string>Profile Directory:</string>
+              <string>Profi&amp;le Directory:</string>
              </property>
              <property name="buddy">
               <cstring>profileDefaultDirLineEdit</cstring>
@@ -136,11 +133,6 @@
              <property name="text">
               <string/>
              </property>
-             <property name="icon">
-              <iconset theme="document-open-folder">
-               <normaloff/>
-              </iconset>
-             </property>
             </widget>
            </item>
           </layout>
@@ -164,6 +156,48 @@
              </property>
              <property name="value">
               <number>5</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <spacer name="verticalSpacer_4">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeType">
+            <enum>QSizePolicy::Fixed</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>8</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_12">
+           <property name="bottomMargin">
+            <number>8</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="gamepadPollRateLabel">
+             <property name="text">
+              <string>Gamepad Poll Rate:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="gamepadPollRateComboBox">
+             <property name="toolTip">
+              <string>Change the poll rate that the program uses to discover new
+events from gamepads. Defaults to 10 ms.
+
+Reducing the poll rate value could cause the application to
+use more CPU power so please test the setting that you use
+before using antimicro unattended.</string>
              </property>
             </widget>
            </item>
@@ -267,7 +301,7 @@ first launches.</string>
           </widget>
          </item>
          <item>
-          <spacer name="verticalSpacer_4">
+          <spacer name="verticalSpacer_7">
            <property name="orientation">
             <enum>Qt::Vertical</enum>
            </property>
@@ -446,6 +480,9 @@ per seconds.</string>
          <property name="topMargin">
           <number>4</number>
          </property>
+         <property name="bottomMargin">
+          <number>9</number>
+         </property>
          <item>
           <widget class="QLabel" name="label">
            <property name="text">
@@ -521,6 +558,9 @@ Settings will not take affect until you either refresh all joysticks or unplug t
        </widget>
        <widget class="QWidget" name="page">
         <layout class="QVBoxLayout" name="verticalLayout_4">
+         <property name="topMargin">
+          <number>4</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_8">
            <property name="text">
@@ -549,6 +589,9 @@ Settings will not take affect until you either refresh all joysticks or unplug t
          </item>
          <item>
           <widget class="QListWidget" name="localeListWidget">
+           <property name="currentRow">
+            <number>-1</number>
+           </property>
            <item>
             <property name="text">
              <string>Default</string>
@@ -576,12 +619,32 @@ Settings will not take affect until you either refresh all joysticks or unplug t
            </item>
            <item>
             <property name="text">
+             <string>Italian</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Japanese</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
              <string>Russian</string>
             </property>
            </item>
            <item>
             <property name="text">
              <string>Serbian</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Simplified Chinese</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Spanish</string>
             </property>
            </item>
            <item>
@@ -807,6 +870,9 @@ Settings will not take affect until you either refresh all joysticks or unplug t
          <property name="spacing">
           <number>10</number>
          </property>
+         <property name="topMargin">
+          <number>4</number>
+         </property>
          <item>
           <widget class="QCheckBox" name="disableWindowsEnhancedPointCheckBox">
            <property name="toolTip">
@@ -847,7 +913,7 @@ precise.</string>
               <item row="0" column="0">
                <widget class="QLabel" name="label_6">
                 <property name="text">
-                 <string>History Size:</string>
+                 <string>Histor&amp;y Size:</string>
                 </property>
                 <property name="buddy">
                  <cstring>historySizeSpinBox</cstring>
@@ -863,7 +929,7 @@ precise.</string>
                  <number>1</number>
                 </property>
                 <property name="maximum">
-                 <number>30</number>
+                 <number>100</number>
                 </property>
                 <property name="value">
                  <number>10</number>
@@ -873,7 +939,7 @@ precise.</string>
               <item row="1" column="0">
                <widget class="QLabel" name="label_7">
                 <property name="text">
-                 <string>Weight Modifier:</string>
+                 <string>Weight &amp;Modifier:</string>
                 </property>
                 <property name="buddy">
                  <cstring>weightModifierDoubleSpinBox</cstring>
@@ -963,6 +1029,156 @@ is to use all available screens.</string>
           </widget>
          </item>
          <item>
+          <widget class="QFrame" name="extraInfoFrame">
+           <property name="frameShape">
+            <enum>QFrame::StyledPanel</enum>
+           </property>
+           <property name="frameShadow">
+            <enum>QFrame::Raised</enum>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_10">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_13">
+              <property name="spacing">
+               <number>6</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="accelNumTitleLabel">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string>Accel Numerator:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="accelNumLabel">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string>0</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer_3">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_15">
+              <item>
+               <widget class="QLabel" name="accelDenomTitleLabel">
+                <property name="text">
+                 <string>Accel Denominator:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="accelDenomLabel">
+                <property name="text">
+                 <string>0</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer_4">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_14">
+              <item>
+               <widget class="QLabel" name="accelThresTitleLabel">
+                <property name="text">
+                 <string>Accel Threshold:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="accelThresLabel">
+                <property name="text">
+                 <string>0</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer_5">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_16">
+              <item>
+               <spacer name="horizontalSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="QPushButton" name="resetAccelPushButton">
+                <property name="toolTip">
+                 <string>If the acceleration values for the virtual mouse have been
+changed by a different process, particularly when quitting
+an older game, then you might want to reset the acceleration
+values used by the virtual mouse.</string>
+                </property>
+                <property name="text">
+                 <string>Reset Acceleration</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
           <spacer name="verticalSpacer_5">
            <property name="orientation">
             <enum>Qt::Vertical</enum>
@@ -970,7 +1186,7 @@ is to use all available screens.</string>
            <property name="sizeHint" stdset="0">
             <size>
              <width>20</width>
-             <height>220</height>
+             <height>20</height>
             </size>
            </property>
           </spacer>

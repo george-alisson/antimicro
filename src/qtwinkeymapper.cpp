@@ -1,4 +1,22 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <qt_windows.h>
+//#include <QDebug>
 #include <QHashIterator>
 
 #include "winextras.h"
@@ -55,6 +73,7 @@ static QHash<QString, unsigned int> intCharToQtKey()
     temp.insert(QString('{'), Qt::Key_BraceLeft);
     temp.insert(QString('}'), Qt::Key_BraceRight);
     temp.insert(QString::fromUtf8("\u00A1"), Qt::Key_exclamdown);
+    temp.insert(QString('~'), Qt::Key_AsciiTilde);
     //temp.insert(QString::fromUtf8("\u20A0"), Qt::Key_)
 
     return temp;
@@ -63,21 +82,21 @@ static QHash<QString, unsigned int> intCharToQtKey()
 static QHash<QString, unsigned int> initDeadKeyToQtKey()
 {
     QHash<QString, unsigned int> temp;
-    temp.insert(QString('`'), Qt::Key_Dead_Grave);
-    temp.insert(QString('\''), Qt::Key_Dead_Acute);
+    //temp.insert(QString('`'), Qt::Key_Dead_Grave);
+    //temp.insert(QString('\''), Qt::Key_Dead_Acute);
     temp.insert(QString::fromUtf8("\u00B4"), Qt::Key_Dead_Grave);
-    temp.insert(QString('^'), Qt::Key_Dead_Circumflex);
-    temp.insert(QString('~'), Qt::Key_Dead_Tilde);
+    //temp.insert(QString('^'), Qt::Key_Dead_Circumflex);
+    //temp.insert(QString('~'), Qt::Key_Dead_Tilde);
     temp.insert(QString::fromUtf8("\u02DC"), Qt::Key_Dead_Tilde);
     temp.insert(QString::fromUtf8("\u00AF"), Qt::Key_Dead_Macron);
     temp.insert(QString::fromUtf8("\u02D8"), Qt::Key_Dead_Breve);
     temp.insert(QString::fromUtf8("\u02D9"), Qt::Key_Dead_Abovedot);
-    temp.insert(QString('"'), Qt::Key_Dead_Diaeresis);
+    //temp.insert(QString('"'), Qt::Key_Dead_Diaeresis);
     temp.insert(QString::fromUtf8("\u00A8"), Qt::Key_Dead_Diaeresis);
     temp.insert(QString::fromUtf8("\u02DA"), Qt::Key_Dead_Abovering);
     temp.insert(QString::fromUtf8("\u02DD"), Qt::Key_Dead_Doubleacute);
     temp.insert(QString::fromUtf8("\u02C7"), Qt::Key_Dead_Caron);
-    temp.insert(QString(','), Qt::Key_Dead_Cedilla);
+    //temp.insert(QString(','), Qt::Key_Dead_Cedilla);
     temp.insert(QString::fromUtf8("\u00B8"), Qt::Key_Dead_Cedilla);
     temp.insert(QString::fromUtf8("\u02DB"), Qt::Key_Dead_Ogonek);
     temp.insert(QString::fromUtf8("\u037A"), Qt::Key_Dead_Iota);
@@ -94,7 +113,9 @@ static QHash<QString, unsigned int> deadKeyToQtKeyHash = initDeadKeyToQtKey();
 QtWinKeyMapper::QtWinKeyMapper(QObject *parent) :
     QtKeyMapperBase(parent)
 {
+    identifier = "sendinput";
     populateMappingHashes();
+    populateCharKeyInformation();
 }
 
 void QtWinKeyMapper::populateMappingHashes()
@@ -172,6 +193,7 @@ void QtWinKeyMapper::populateMappingHashes()
         qtKeyToVirtualKey[Qt::Key_LaunchMedia] = VK_LAUNCH_MEDIA_SELECT;
         qtKeyToVirtualKey[Qt::Key_Launch0] = VK_LAUNCH_APP1;
         qtKeyToVirtualKey[Qt::Key_Launch1] = VK_LAUNCH_APP2;
+        qtKeyToVirtualKey[Qt::Key_Kanji] = VK_KANJI;
 
         // The following VK_OEM_* keys are consistent across all
         // keyboard layouts.
@@ -240,16 +262,20 @@ void QtWinKeyMapper::populateMappingHashes()
             int charlength = ToAscii(oemkey, scancode, ks, (WORD*)cbuf, 0);
             if (charlength < 0)
             {
+                charlength = ToAscii(VK_SPACE, scancode, ks, (WORD*)cbuf, 0);
                 QString temp = QString::fromUtf8(cbuf);
-                QHashIterator<QString, unsigned int> tempiter(deadKeyToQtKeyHash);
-                while (tempiter.hasNext())
+                if (temp.length() > 0)
                 {
-                    tempiter.next();
-                    QString currentChar = tempiter.key();
-                    if (currentChar == temp)
+                    QHashIterator<QString, unsigned int> tempiter(charToQtKeyHash);
+                    while (tempiter.hasNext())
                     {
-                        dynamicOEMToQtKeyHash[oemkey] = tempiter.value();
-                        tempiter.toBack();
+                        tempiter.next();
+                        QString currentChar = tempiter.key();
+                        if (currentChar == temp)
+                        {
+                            dynamicOEMToQtKeyHash[oemkey] = tempiter.value();
+                            tempiter.toBack();
+                        }
                     }
                 }
             }
@@ -314,4 +340,71 @@ unsigned int QtWinKeyMapper::returnQtKey(unsigned int key, unsigned int scancode
     }
 
     return tempkey;
+}
+
+void QtWinKeyMapper::populateCharKeyInformation()
+{
+    virtualkeyToCharKeyInformation.clear();
+
+    unsigned int total = 0;
+    //BYTE ks[256];
+    //GetKeyboardState(ks);
+    /*for (int x=0; x <= 255; x++)
+    {
+        if (ks[x] != 0)
+        {
+            qDebug() << "TEST: " << QString::number(x)
+                     << " | " << QString::number(ks[x]);
+        }
+    }
+    */
+
+    for (int i=VK_SPACE; i <= VK_OEM_CLEAR; i++)
+    {
+        unsigned int scancode = MapVirtualKey(i, 0);
+
+        for (int j=0; j <= 3; j++)
+        {
+            WCHAR cbuf[256];
+            BYTE tempks[256];
+            memset(tempks, 0, sizeof(tempks));
+
+            Qt::KeyboardModifiers dicis;
+            if (j >= 2)
+            {
+                dicis |= Qt::MetaModifier;
+                tempks[VK_LWIN] = 1 << 7;
+                //tempks[VK_RWIN] = 1 << 7;
+            }
+
+            if (j == 1 || j == 3)
+            {
+                dicis |= Qt::ShiftModifier;
+                tempks[VK_LSHIFT] = 1 << 7;
+                tempks[VK_SHIFT] = 1 << 7;
+                //qDebug() << "NEVER ME: ";
+            }
+
+            int charlength = ToUnicode(i, scancode, tempks, cbuf, 255, 0);
+            if (charlength == 1 || charlength < 0)
+            {
+                QString temp = QString::fromWCharArray(cbuf);
+                if (temp.size() > 0)
+                {
+                    QChar tempchar(temp.at(0));
+                    charKeyInformation tempinfo;
+                    tempinfo.modifiers = dicis;
+                    tempinfo.virtualkey = i;
+                    if (!virtualkeyToCharKeyInformation.contains(tempchar.unicode()))
+                    {
+                        virtualkeyToCharKeyInformation.insert(tempchar.unicode(), tempinfo);
+                        total++;
+                    }
+                }
+            }
+        }
+
+    }
+
+    //qDebug() << "TOTAL: " << total;
 }

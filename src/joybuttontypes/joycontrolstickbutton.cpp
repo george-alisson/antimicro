@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 #include <cmath>
 #include <QStringList>
@@ -117,6 +134,8 @@ double JoyControlStickButton::getMouseDistanceFromDeadZone()
 
 void JoyControlStickButton::setChangeSetCondition(SetChangeCondition condition, bool passive)
 {
+    SetChangeCondition oldCondition = setSelectionCondition;
+
     if (condition != setSelectionCondition && !passive)
     {
         if (condition == SetChangeWhileHeld || condition == SetChangeTwoWay)
@@ -141,6 +160,12 @@ void JoyControlStickButton::setChangeSetCondition(SetChangeCondition condition, 
     {
         setChangeSetSelection(-1);
     }
+
+    if (setSelectionCondition != oldCondition)
+    {
+        buildActiveZoneSummaryString();
+        emit propertyUpdated();
+    }
 }
 
 int JoyControlStickButton::getRealJoyNumber()
@@ -155,7 +180,7 @@ JoyControlStick* JoyControlStickButton::getStick()
 
 JoyStickDirectionsType::JoyStickDirections JoyControlStickButton::getDirection()
 {
-    return (JoyStickDirectionsType::JoyStickDirections)index;
+    return static_cast<JoyStickDirectionsType::JoyStickDirections>(index);
 }
 
 /**
@@ -181,9 +206,16 @@ bool JoyControlStickButton::isPartRealAxis()
     return true;
 }
 
-double JoyControlStickButton::getLastMouseDistanceFromDeadZone()
+double JoyControlStickButton::getLastAccelerationDistance()
 {
-    return stick->calculateLastMouseDirectionalDistance(this);
+    double temp = stick->calculateLastAccelerationButtonDistance(this);
+    return temp;
+}
+
+double JoyControlStickButton::getAccelerationDistance()
+{
+    double temp = stick->calculateAccelerationDistance(this);
+    return temp;
 }
 
 /**
@@ -195,13 +227,58 @@ QString JoyControlStickButton::getActiveZoneSummary()
 {
     QList<JoyButtonSlot*> tempList;
     JoyControlStickModifierButton *tempButton = stick->getModifierButton();
-    if (tempButton && tempButton->getButtonState() && getButtonState())
+    /*if (tempButton && tempButton->getButtonState() &&
+          tempButton->hasActiveSlots() && getButtonState())
     {
         QList<JoyButtonSlot*> activeModifierSlots = tempButton->getActiveZoneList();
         tempList.append(activeModifierSlots);
     }
+    */
 
     tempList.append(getActiveZoneList());
     QString temp = buildActiveZoneSummary(tempList);
     return temp;
+}
+
+QString JoyControlStickButton::getCalculatedActiveZoneSummary()
+{
+    JoyControlStickModifierButton *tempButton = stick->getModifierButton();
+    QString temp;
+    QStringList stringlist;
+
+    if (tempButton && tempButton->getButtonState() &&
+        tempButton->hasActiveSlots() && getButtonState())
+    {
+        stringlist.append(tempButton->getCalculatedActiveZoneSummary());
+    }
+
+    stringlist.append(JoyButton::getCalculatedActiveZoneSummary());
+    temp = stringlist.join(", ");
+
+    return temp;
+}
+
+double JoyControlStickButton::getLastMouseDistanceFromDeadZone()
+{
+    return stick->calculateLastMouseDirectionalDistance(this);
+}
+
+double JoyControlStickButton::getCurrentSpringDeadCircle()
+{
+    double result = (springDeadCircleMultiplier * 0.01);
+    if (index == JoyControlStick::StickLeft || index == JoyControlStick::StickRight)
+    {
+        result = stick->getSpringDeadCircleX() * (springDeadCircleMultiplier * 0.01);
+    }
+    else if (index == JoyControlStick::StickUp || index == JoyControlStick::StickDown)
+    {
+        result = stick->getSpringDeadCircleY() * (springDeadCircleMultiplier * 0.01);
+    }
+    else if (index == JoyControlStick::StickRightUp || index == JoyControlStick::StickRightDown ||
+             index == JoyControlStick::StickLeftDown || index == JoyControlStick::StickLeftUp)
+    {
+        result = 0.0;
+    }
+
+    return result;
 }

@@ -1,14 +1,30 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
-#include <QRegExp>
+#include <cmath>
 
 #include "gamecontroller.h"
-
-static QRegExp nonEmptyGUID("^[^0]+$");
+//#include "logger.h"
 
 const QString GameController::xmlName = "gamecontroller";
 
-GameController::GameController(SDL_GameController *controller, int deviceIndex, AntiMicroSettings *settings,
-                               QObject *parent) :
+GameController::GameController(SDL_GameController *controller, int deviceIndex,
+                               AntiMicroSettings *settings, QObject *parent) :
     InputDevice(deviceIndex, settings, parent)
 {
     this->controller = controller;
@@ -41,6 +57,24 @@ QString GameController::getSDLName()
 
 QString GameController::getGUIDString()
 {
+    QString temp = getRawGUIDString();
+#ifdef Q_OS_WIN
+    // On Windows, if device is seen as a game controller by SDL
+    // and the device has an empty GUID, assume that it is an XInput
+    // compatible device. Send back xinput as the GUID since SDL uses it
+    // internally anyway.
+    /*if (!temp.isEmpty() && temp.contains(emptyGUID))
+    {
+        temp = "xinput";
+    }
+    */
+#endif
+
+    return temp;
+}
+
+QString GameController::getRawGUIDString()
+{
     QString temp;
     if (controller)
     {
@@ -51,17 +85,6 @@ QString GameController::getGUIDString()
             char guidString[65] = {'0'};
             SDL_JoystickGetGUIDString(tempGUID, guidString, sizeof(guidString));
             temp = QString(guidString);
-#ifdef Q_OS_WIN
-            // On Windows, if device is seen as a game controller by SDL
-            // and the device has an empty GUID, assume that it is an XInput
-            // compatible device. Send back xinput as the GUID since SDL uses it
-            // internally anyway.
-            /*if (!temp.contains(nonEmptyGUID))
-            {
-                temp = "xinput";
-            }
-            */
-#endif
         }
     }
 
@@ -735,7 +758,9 @@ void GameController::writeConfig(QXmlStreamWriter *xml)
 QString GameController::getBindStringForAxis(int index, bool trueIndex)
 {
     QString temp;
-    SDL_GameControllerButtonBind bind = SDL_GameControllerGetBindForAxis(controller, (SDL_GameControllerAxis)index);
+    SDL_GameControllerButtonBind bind =
+            SDL_GameControllerGetBindForAxis(controller,
+                                             static_cast<SDL_GameControllerAxis>(index));
     if (bind.bindType != SDL_CONTROLLER_BINDTYPE_NONE)
     {
         int offset = trueIndex ? 0 : 1;
@@ -754,7 +779,10 @@ QString GameController::getBindStringForAxis(int index, bool trueIndex)
 QString GameController::getBindStringForButton(int index, bool trueIndex)
 {
     QString temp;
-    SDL_GameControllerButtonBind bind = SDL_GameControllerGetBindForButton(controller, (SDL_GameControllerButton)index);
+    SDL_GameControllerButtonBind bind =
+            SDL_GameControllerGetBindForButton(controller,
+                                               static_cast<SDL_GameControllerButton>(index));
+
     if (bind.bindType != SDL_CONTROLLER_BINDTYPE_NONE)
     {
         int offset = trueIndex ? 0 : 1;
@@ -790,41 +818,41 @@ SDL_GameControllerButtonBind GameController::getBindForButton(int index)
 
 void GameController::buttonClickEvent(int buttonindex)
 {
-    SDL_GameControllerButtonBind bind = getBindForButton((SDL_GameControllerButton)buttonindex);
+    SDL_GameControllerButtonBind bind = getBindForButton(static_cast<SDL_GameControllerButton>(buttonindex));
     if (bind.bindType != SDL_CONTROLLER_BINDTYPE_NONE)
     {
         if (bind.bindType == SDL_CONTROLLER_BINDTYPE_AXIS)
         {
             //emit rawAxisButtonClick(bind.value.axis, 0);
-            emit rawAxisActivated(bind.value.axis, JoyAxis::AXISMAX);
+            //emit rawAxisActivated(bind.value.axis, JoyAxis::AXISMAX);
         }
         else if (bind.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON)
         {
-            emit rawButtonClick(bind.value.button);
+            //emit rawButtonClick(bind.value.button);
         }
         else if (bind.bindType == SDL_CONTROLLER_BINDTYPE_HAT)
         {
-            emit rawDPadButtonClick(bind.value.hat.hat, bind.value.hat.hat_mask);
+            //emit rawDPadButtonClick(bind.value.hat.hat, bind.value.hat.hat_mask);
         }
     }
 }
 
 void GameController::buttonReleaseEvent(int buttonindex)
 {
-    SDL_GameControllerButtonBind bind = getBindForButton((SDL_GameControllerButton)buttonindex);
+    SDL_GameControllerButtonBind bind = getBindForButton(static_cast<SDL_GameControllerButton>(buttonindex));
     if (bind.bindType != SDL_CONTROLLER_BINDTYPE_NONE)
     {
         if (bind.bindType == SDL_CONTROLLER_BINDTYPE_AXIS)
         {
-            emit rawAxisButtonRelease(bind.value.axis, 0);
+            //emit rawAxisButtonRelease(bind.value.axis, 0);
         }
         else if (bind.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON)
         {
-            emit rawButtonRelease(bind.value.button);
+            //emit rawButtonRelease(bind.value.button);
         }
         else if (bind.bindType == SDL_CONTROLLER_BINDTYPE_HAT)
         {
-            emit rawDPadButtonRelease(bind.value.hat.hat, bind.value.hat.hat_mask);
+            //emit rawDPadButtonRelease(bind.value.hat.hat, bind.value.hat.hat_mask);
         }
     }
 }
@@ -833,21 +861,21 @@ void GameController::axisActivatedEvent(int setindex, int axisindex, int value)
 {
     Q_UNUSED(setindex);
 
-    SDL_GameControllerButtonBind bind = getBindForAxis((SDL_GameControllerButton)axisindex);
+    SDL_GameControllerButtonBind bind = getBindForAxis(static_cast<SDL_GameControllerButton>(axisindex));
     if (bind.bindType != SDL_CONTROLLER_BINDTYPE_NONE)
     {
         if (bind.bindType == SDL_CONTROLLER_BINDTYPE_AXIS)
         {
             //emit rawAxisButtonClick(bind.value.axis, 0);
-            emit rawAxisActivated(bind.value.axis, value);
+            //emit rawAxisActivated(bind.value.axis, value);
         }
         else if (bind.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON)
         {
-            emit rawButtonClick(bind.value.button);
+            //emit rawButtonClick(bind.value.button);
         }
         else if (bind.bindType == SDL_CONTROLLER_BINDTYPE_HAT)
         {
-            emit rawDPadButtonClick(bind.value.hat.hat, bind.value.hat.hat_mask);
+            //emit rawDPadButtonClick(bind.value.hat.hat, bind.value.hat.hat_mask);
         }
     }
 }
@@ -864,4 +892,70 @@ SDL_JoystickID GameController::getSDLJoystickID()
 bool GameController::isGameController()
 {
     return true;
+}
+
+/**
+ * @brief Check if GUID passed matches the expected GUID for a device.
+ *     Needed for xinput GUID abstraction.
+ * @param GUID string
+ * @return if GUID is considered a match.
+ */
+bool GameController::isRelevantGUID(QString tempGUID)
+{
+    bool result = false;
+
+    if (InputDevice::isRelevantGUID(tempGUID))// || isEmptyGUID(tempGUID))
+    {
+        result = true;
+    }
+
+    return result;
+}
+
+void GameController::rawButtonEvent(int index, bool pressed)
+{
+    bool knownbutton = rawbuttons.contains(index);
+    if (!knownbutton && pressed)
+    {
+        rawbuttons.insert(index, pressed);
+        emit rawButtonClick(index);
+    }
+    else if (knownbutton && !pressed)
+    {
+        rawbuttons.remove(index);
+        emit rawButtonRelease(index);
+    }
+}
+
+void GameController::rawAxisEvent(int index, int value)
+{
+    bool knownaxis = axisvalues.contains(index);
+
+    if (!knownaxis && fabs(value) > rawAxisDeadZone)
+    {
+        axisvalues.insert(index, value);
+        emit rawAxisActivated(index, value);
+    }
+    else if (knownaxis && fabs(value) < rawAxisDeadZone)
+    {
+        axisvalues.remove(index);
+        emit rawAxisReleased(index, value);
+    }
+
+    emit rawAxisMoved(index, value);
+}
+
+void GameController::rawDPadEvent(int index, int value)
+{
+    bool knowndpad = dpadvalues.contains(index);
+    if (!knowndpad && value != 0)
+    {
+        dpadvalues.insert(index, value);
+        emit rawDPadButtonClick(index, value);
+    }
+    else if (knowndpad && value == 0)
+    {
+        dpadvalues.remove(index);
+        emit rawDPadButtonRelease(index, value);
+    }
 }

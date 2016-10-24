@@ -1,19 +1,43 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #define XK_MISCELLANY
 #define XK_LATIN1
 #define XK_KOREAN
 #define XK_XKB_KEYS
-#include <X11/keysymdef.h>
-#include <X11/XF86keysym.h>
 
+//#include <QDebug>
+#include <QApplication>
 #include <QHashIterator>
 
-#include "qtx11keymapper.h"
+#include <X11/keysymdef.h>
+#include <X11/XF86keysym.h>
+#include <X11/XKBlib.h>
+#include <X11/Xutil.h>
 
+#include "qtx11keymapper.h"
+#include "x11extras.h"
 
 QtX11KeyMapper::QtX11KeyMapper(QObject *parent) :
     QtKeyMapperBase(parent)
 {
+    identifier = "xtest";
     populateMappingHashes();
+    populateCharKeyInformation();
 }
 
 /*
@@ -256,7 +280,7 @@ void QtX11KeyMapper::populateMappingHashes()
         qtKeyToVirtualKey[AntKey_Control_R] = XK_Control_R;
         //qtKeyToX11KeySym[AntKey_Shift_Lock] = XK_Shift_Lock;
         //qtKeyToVirtualKey[AntKey_Meta_R] = XK_Meta_R;
-        qtKeyToVirtualKey[AntKey_Alt_R] = XK_Multi_key;
+        qtKeyToVirtualKey[AntKey_Alt_R] = XK_Alt_R;
         qtKeyToVirtualKey[AntKey_KP_Multiply] = XK_KP_Multiply;
 
         for (int i=0; i <= (XK_KP_9 - XK_KP_0); i++)
@@ -272,3 +296,87 @@ void QtX11KeyMapper::populateMappingHashes()
         }
     }
 }
+
+void QtX11KeyMapper::populateCharKeyInformation()
+{
+    virtualkeyToCharKeyInformation.clear();
+    Display* display = X11Extras::getInstance()->display();
+
+    unsigned int total = 0;
+    for (int i=8; i <= 255; i++)
+    {
+        for (int j=0; j <= 3; j++)
+        {
+            Qt::KeyboardModifiers dicis;
+            if (j >= 2)
+            {
+                dicis |= Qt::MetaModifier;
+            }
+
+            if (j == 1 || j == 3)
+            {
+                dicis |= Qt::ShiftModifier;
+            }
+
+            unsigned int testsym = XkbKeycodeToKeysym(display, i,
+                                                      dicis & Qt::MetaModifier ? 1 : 0,
+                                                      dicis & Qt::ShiftModifier ? 1 : 0);
+            if (testsym != NoSymbol)
+            {
+                XKeyPressedEvent tempevent;
+                tempevent.keycode = i;
+                tempevent.type = KeyPress;
+                tempevent.display = display;
+                tempevent.state = 0;
+                if (dicis & Qt::ShiftModifier)
+                {
+                    tempevent.state |= ShiftMask;
+                }
+
+                if (dicis & Qt::MetaModifier)
+                {
+                    tempevent.state |= Mod1Mask;
+                }
+
+                char returnstring[256];
+                memset(returnstring, 0, sizeof(returnstring));
+                int bitestoreturn = sizeof(returnstring) - 1;
+                int numchars = XLookupString(&tempevent, returnstring, bitestoreturn, NULL, NULL);
+                if (numchars > 0)
+                {
+                    returnstring[numchars] = '\0';
+                    QString tempstring = QString::fromUtf8(returnstring);
+                    if (tempstring.length() == 1)
+                    {
+                        QChar tempchar(tempstring.at(0));
+                        charKeyInformation testKeyInformation;
+                        testKeyInformation.modifiers = dicis;
+                        testKeyInformation.virtualkey = testsym;
+                        if (!virtualkeyToCharKeyInformation.contains(tempchar.unicode()))
+                        {
+                            virtualkeyToCharKeyInformation.insert(tempchar.unicode(), testKeyInformation);
+                            //qDebug() << "I FOUND SOMETHING: " << tempchar;
+                            total++;
+                        }
+                    }
+                    else
+                    {
+                        //qDebug() << "YOU FAIL: " << tempchar;
+                    }
+                }
+
+            }
+        }
+    }
+
+    //qDebug() << "TOTAL: " << total;
+    //qDebug() << "";
+
+    QChar tempa('*');
+    if (virtualkeyToCharKeyInformation.contains(tempa.unicode()))
+    {
+        charKeyInformation projects = virtualkeyToCharKeyInformation.value(tempa.unicode());
+    }
+}
+
+

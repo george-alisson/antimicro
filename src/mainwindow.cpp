@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 #include <QHash>
 #include <QHashIterator>
@@ -102,8 +119,11 @@ MainWindow::MainWindow(QMap<SDL_JoystickID, InputDevice*> *joysticks,
     {
         trayIconMenu = new QMenu(this);
         trayIcon = new QSystemTrayIcon(this);
+        trayIcon->setContextMenu(trayIconMenu);
+
         connect(trayIconMenu, SIGNAL(aboutToShow()), this, SLOT(refreshTrayIconMenu()));
-        connect(trayIcon, SIGNAL(activated(QSystemTrayIcon::ActivationReason)), this, SLOT(trayIconClickAction(QSystemTrayIcon::ActivationReason)), Qt::DirectConnection);
+        connect(trayIcon, SIGNAL(activated(QSystemTrayIcon::ActivationReason)),
+                this, SLOT(trayIconClickAction(QSystemTrayIcon::ActivationReason)));
     }
 
     // Look at flags and call setEnabled as desired; defaults to true.
@@ -121,75 +141,6 @@ MainWindow::MainWindow(QMap<SDL_JoystickID, InputDevice*> *joysticks,
         setEnabled(false);
     }
 
-    fillButtons(joysticks);
-    if (cmdutility->hasProfile())
-    {
-        if (cmdutility->hasControllerNumber())
-        {
-            loadConfigFile(cmdutility->getProfileLocation(), cmdutility->getControllerNumber());
-        }
-        else if (cmdutility->hasControllerID())
-        {
-            loadConfigFile(cmdutility->getProfileLocation(), cmdutility->hasControllerID());
-        }
-        else
-        {
-            loadConfigFile(cmdutility->getProfileLocation());
-        }
-    }
-    else if (cmdutility->isUnloadRequested())
-    {
-        if (cmdutility->hasControllerNumber())
-        {
-            unloadCurrentConfig(cmdutility->getControllerNumber());
-        }
-        else if (cmdutility->hasControllerID())
-        {
-            unloadCurrentConfig(cmdutility->hasControllerID());
-        }
-        else
-        {
-            unloadCurrentConfig(0);
-        }
-    }
-    else if (cmdutility->getStartSetNumber() > 0)
-    {
-        if (cmdutility->hasControllerNumber())
-        {
-            changeStartSetNumber(cmdutility->getJoyStartSetNumber(), cmdutility->getControllerNumber());
-        }
-        else if (cmdutility->hasControllerID())
-        {
-            changeStartSetNumber(cmdutility->getJoyStartSetNumber(), cmdutility->getControllerID());
-        }
-        else
-        {
-            changeStartSetNumber(cmdutility->getJoyStartSetNumber());
-        }
-    }
-    else if (cmdutility->shouldListControllers())
-    {
-        this->graphical = graphical = false;
-    }
-#ifdef USE_SDL_2
-    else if (cmdutility->shouldMapController())
-    {
-        this->graphical = graphical = false;
-        if (cmdutility->hasControllerNumber())
-        {
-            unsigned int joypadIndex = cmdutility->getControllerNumber();
-            selectControllerJoyTab(joypadIndex);
-            openGameControllerMappingWindow(true);
-        }
-        else if (cmdutility->hasControllerID())
-        {
-            QString joypadGUID = cmdutility->getControllerID();
-            selectControllerJoyTab(joypadGUID);
-            openGameControllerMappingWindow(true);
-        }
-    }
-#endif
-
     resize(settings->value("WindowSize", size()).toSize());
     move(settings->value("WindowPosition", pos()).toPoint());
 
@@ -202,6 +153,7 @@ MainWindow::MainWindow(QMap<SDL_JoystickID, InputDevice*> *joysticks,
         aboutDialog = 0;
     }
 
+    connect(ui->menuQuit, SIGNAL(aboutToShow()), this, SLOT(mainMenuChange()));
     connect(ui->menuOptions, SIGNAL(aboutToShow()), this, SLOT(mainMenuChange()));
     connect(ui->actionKeyValue, SIGNAL(triggered()), this, SLOT(openKeyCheckerDialog()));
     connect(ui->actionAbout_Qt, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
@@ -212,7 +164,6 @@ MainWindow::MainWindow(QMap<SDL_JoystickID, InputDevice*> *joysticks,
 
 #ifdef USE_SDL_2
     connect(ui->actionGameController_Mapping, SIGNAL(triggered()), this, SLOT(openGameControllerMappingWindow()));
-    //connect(ui->menuOptions, SIGNAL(aboutToShow()), this, SLOT(updateMenuOptions()));
 
     #if defined(Q_OS_UNIX) && defined(WITH_X11)
         #if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
@@ -256,6 +207,168 @@ MainWindow::MainWindow(QMap<SDL_JoystickID, InputDevice*> *joysticks,
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::alterConfigFromSettings()
+{
+    if (cmdutility->shouldListControllers())
+    {
+        this->graphical = graphical = false;
+    }
+    else if (cmdutility->hasProfile())
+    {
+        if (cmdutility->hasControllerNumber())
+        {
+            loadConfigFile(cmdutility->getProfileLocation(),
+                           cmdutility->getControllerNumber());
+        }
+        else if (cmdutility->hasControllerID())
+        {
+            loadConfigFile(cmdutility->getProfileLocation(),
+                           cmdutility->hasControllerID());
+        }
+        else
+        {
+            loadConfigFile(cmdutility->getProfileLocation());
+        }
+    }
+
+    QList<ControllerOptionsInfo> *tempList = cmdutility->getControllerOptionsList();
+    //unsigned int optionListSize = tempList->size();
+
+    QListIterator<ControllerOptionsInfo> optionIter(*tempList);
+    while (optionIter.hasNext())
+    {
+        ControllerOptionsInfo temp = optionIter.next();
+        if (temp.hasProfile())
+        {
+            if (temp.hasControllerNumber())
+            {
+                loadConfigFile(temp.getProfileLocation(),
+                               temp.getControllerNumber());
+            }
+            else if (temp.hasControllerID())
+            {
+                loadConfigFile(temp.getProfileLocation(),
+                               temp.hasControllerID());
+            }
+            else
+            {
+                loadConfigFile(temp.getProfileLocation());
+            }
+        }
+        else if (temp.isUnloadRequested())
+        {
+            if (temp.hasControllerNumber())
+            {
+                unloadCurrentConfig(temp.getControllerNumber());
+            }
+            else if (temp.hasControllerID())
+            {
+                unloadCurrentConfig(temp.hasControllerID());
+            }
+            else
+            {
+                unloadCurrentConfig(0);
+            }
+        }
+
+        if (temp.getStartSetNumber() > 0)
+        {
+            if (temp.hasControllerNumber())
+            {
+                changeStartSetNumber(temp.getJoyStartSetNumber(),
+                                     temp.getControllerNumber());
+            }
+            else if (temp.hasControllerID())
+            {
+                changeStartSetNumber(temp.getJoyStartSetNumber(),
+                                     temp.getControllerID());
+            }
+            else
+            {
+                changeStartSetNumber(temp.getJoyStartSetNumber());
+            }
+        }
+    }
+}
+
+#ifdef USE_SDL_2
+void MainWindow::controllerMapOpening()
+{
+    if (cmdutility->shouldMapController())
+    {
+        this->graphical = graphical = false;
+
+        QList<ControllerOptionsInfo> *tempList = cmdutility->getControllerOptionsList();
+        ControllerOptionsInfo temp = tempList->at(0);
+
+        if (temp.hasControllerNumber())
+        {
+            unsigned int joypadIndex = cmdutility->getControllerNumber();
+            selectControllerJoyTab(joypadIndex);
+            openGameControllerMappingWindow(true);
+        }
+        else if (temp.hasControllerID())
+        {
+            QString joypadGUID = cmdutility->getControllerID();
+            selectControllerJoyTab(joypadGUID);
+            openGameControllerMappingWindow(true);
+        }
+        else
+        {
+            Logger::LogInfo(tr("Could not find a proper controller identifier. "
+                               "Exiting."));
+            qApp->quit();
+        }
+    }
+}
+#endif
+
+void MainWindow::fillButtons()
+{
+    fillButtons(joysticks);
+}
+
+void MainWindow::makeJoystickTabs()
+{
+    ui->stackedWidget->setCurrentIndex(0);
+    removeJoyTabs();
+
+#ifdef USE_SDL_2
+    // Make temporary QMap with devices inserted using the device index as the
+    // key rather than joystick ID.
+    QMap<SDL_JoystickID, InputDevice*> temp;
+    QMapIterator<SDL_JoystickID, InputDevice*> iterTemp(*joysticks);
+    while (iterTemp.hasNext())
+    {
+        iterTemp.next();
+
+        InputDevice *joystick = iterTemp.value();
+        temp.insert(joystick->getJoyNumber(), joystick);
+    }
+
+    QMapIterator<SDL_JoystickID, InputDevice*> iter(temp);
+#else
+    QMapIterator<SDL_JoystickID, InputDevice*> iter(*joysticks);
+#endif
+
+    while (iter.hasNext())
+    {
+        iter.next();
+
+        InputDevice *joystick = iter.value();
+        JoyTabWidget *tabwidget = new JoyTabWidget(joystick, settings, this);
+        QString joytabName = joystick->getSDLName();
+        joytabName.append(" ").append(tr("(%1)").arg(joystick->getName()));
+        ui->tabWidget->addTab(tabwidget, joytabName);
+    }
+
+    if (joysticks > 0)
+    {
+        ui->tabWidget->setCurrentIndex(0);
+        ui->stackedWidget->setCurrentIndex(1);
+    }
 }
 
 void MainWindow::fillButtons(InputDevice *joystick)
@@ -310,7 +423,7 @@ void MainWindow::fillButtons(QMap<SDL_JoystickID, InputDevice *> *joysticks)
         }
     }
 
-    if (joysticks->count() > 0)
+    if (joysticks->size() > 0)
     {
         loadAppConfig();
 
@@ -328,11 +441,6 @@ void MainWindow::fillButtons(QMap<SDL_JoystickID, InputDevice *> *joysticks)
     ui->actionUpdate_Joysticks->setEnabled(true);
     ui->actionHide->setEnabled(true);
     ui->actionQuit->setEnabled(true);
-}
-
-void MainWindow::joystickRefreshPropogate(InputDevice *joystick)
-{
-    emit joystickRefreshRequested(joystick);
 }
 
 // Intermediate slot to be used in Form Designer
@@ -353,7 +461,7 @@ void MainWindow::populateTrayIcon()
 
     trayIconMenu->clear();
     profileActions.clear();
-    unsigned int joystickCount = joysticks->count();
+    unsigned int joystickCount = joysticks->size();
 
     if (joystickCount > 0)
     {
@@ -380,89 +488,92 @@ void MainWindow::populateTrayIcon()
             }
 
             JoyTabWidget *widget = static_cast<JoyTabWidget*>(ui->tabWidget->widget(i));
-            QHash<int, QString> *configs = widget->recentConfigs();
-            QHashIterator<int, QString> configIter(*configs);
-            QList<QAction*> tempProfileList;
-            while (configIter.hasNext())
+            if (widget)
             {
-                configIter.next();
+                QHash<int, QString> *configs = widget->recentConfigs();
+                QHashIterator<int, QString> configIter(*configs);
+                QList<QAction*> tempProfileList;
+                while (configIter.hasNext())
+                {
+                    configIter.next();
+                    QAction *newaction = 0;
+                    if (joysticksubMenu)
+                    {
+                        newaction = new QAction(configIter.value(), joysticksubMenu);
+                    }
+                    else
+                    {
+                        newaction = new QAction(configIter.value(), trayIconMenu);
+                    }
+
+                    newaction->setCheckable(true);
+                    newaction->setChecked(false);
+
+                    if (configIter.key() == widget->getCurrentConfigIndex())
+                    {
+                        newaction->setChecked(true);
+                    }
+
+                    QHash<QString, QVariant> tempmap;
+                    tempmap.insert(QString::number(i), QVariant (configIter.key()));
+                    QVariant tempvar (tempmap);
+                    newaction->setData(tempvar);
+                    connect(newaction, SIGNAL(triggered(bool)), this, SLOT(profileTrayActionTriggered(bool)));
+
+                    if (useSingleList)
+                    {
+                        tempProfileList.append(newaction);
+                    }
+                    else
+                    {
+                        joysticksubMenu->addAction(newaction);
+                    }
+                }
+
+                delete configs;
+                configs = 0;
+
                 QAction *newaction = 0;
                 if (joysticksubMenu)
                 {
-                    newaction = new QAction(configIter.value(), joysticksubMenu);
+                    newaction = new QAction(tr("Open File"), joysticksubMenu);
                 }
                 else
                 {
-                    newaction = new QAction(configIter.value(), trayIconMenu);
+                    newaction = new QAction(tr("Open File"), trayIconMenu);
                 }
 
-                newaction->setCheckable(true);
-                newaction->setChecked(false);
-
-                if (configIter.key() == widget->getCurrentConfigIndex())
-                {
-                    newaction->setChecked(true);
-                }
-
-                QHash<QString, QVariant> tempmap;
-                tempmap.insert(QString::number(i), QVariant (configIter.key()));
-                QVariant tempvar (tempmap);
-                newaction->setData(tempvar);
-                connect(newaction, SIGNAL(triggered(bool)), this, SLOT(profileTrayActionTriggered(bool)));
+                newaction->setIcon(QIcon::fromTheme("document-open"));
+                connect(newaction, SIGNAL(triggered()), widget, SLOT(openConfigFileDialog()));
 
                 if (useSingleList)
                 {
-                    tempProfileList.append(newaction);
+                    QAction *titleAction = new QAction(joytabName, trayIconMenu);
+                    titleAction->setCheckable(false);
+
+                    QFont actionFont = titleAction->font();
+                    actionFont.setBold(true);
+                    titleAction->setFont(actionFont);
+
+                    trayIconMenu->addAction(titleAction);
+                    trayIconMenu->addActions(tempProfileList);
+                    trayIconMenu->addAction(newaction);
+
+                    profileActions.insert(i, tempProfileList);
+
+                    if (iter.hasNext())
+                    {
+                        trayIconMenu->addSeparator();
+                    }
                 }
                 else
                 {
                     joysticksubMenu->addAction(newaction);
+                    connect(joysticksubMenu, SIGNAL(aboutToShow()), this, SLOT(joystickTrayShow()));
                 }
+
+                i++;
             }
-
-            delete configs;
-            configs = 0;
-
-            QAction *newaction = 0;
-            if (joysticksubMenu)
-            {
-                newaction = new QAction(tr("Open File"), joysticksubMenu);
-            }
-            else
-            {
-                newaction = new QAction(tr("Open File"), trayIconMenu);
-            }
-
-            newaction->setIcon(QIcon::fromTheme("document-open"));
-            connect(newaction, SIGNAL(triggered()), widget, SLOT(openConfigFileDialog()));
-
-            if (useSingleList)
-            {
-                QAction *titleAction = new QAction(joytabName, trayIconMenu);
-                titleAction->setCheckable(false);
-
-                QFont actionFont = titleAction->font();
-                actionFont.setBold(true);
-                titleAction->setFont(actionFont);
-
-                trayIconMenu->addAction(titleAction);
-                trayIconMenu->addActions(tempProfileList);
-                trayIconMenu->addAction(newaction);
-
-                profileActions.insert(i, tempProfileList);
-
-                if (iter.hasNext())
-                {
-                    trayIconMenu->addSeparator();
-                }
-            }
-            else
-            {
-                joysticksubMenu->addAction(newaction);
-                connect(joysticksubMenu, SIGNAL(aboutToShow()), this, SLOT(joystickTrayShow()));
-            }
-
-            i++;
         }
 
         if (useSingleList)
@@ -494,7 +605,7 @@ void MainWindow::populateTrayIcon()
     trayIconMenu->addAction(updateJoy);
     trayIconMenu->addAction(closeAction);
 
-    QIcon icon = QIcon(":/images/antimicro_trayicon.png");
+    QIcon icon = QIcon::fromTheme("antimicro", QIcon(":/images/antimicro_trayicon.png"));
     trayIcon->setIcon(icon);
     trayIcon->setContextMenu(trayIconMenu);
 }
@@ -541,28 +652,35 @@ void MainWindow::trayIconClickAction(QSystemTrayIcon::ActivationReason reason)
             this->hideWindow();
         }
     }
-
 }
 
 void MainWindow::mainMenuChange()
 {
-    if (QSystemTrayIcon::isSystemTrayAvailable())
+    QMenu *tempMenu = static_cast<QMenu*>(sender());
+
+    if (tempMenu == ui->menuQuit)
     {
-        ui->actionHide->setEnabled(true);
-    }
-    else
-    {
-        ui->actionHide->setEnabled(false);
+        if (showTrayIcon)
+        {
+            ui->actionHide->setEnabled(true);
+        }
+        else
+        {
+            ui->actionHide->setEnabled(false);
+        }
     }
 
 #ifndef USE_SDL_2
-    ui->actionGameController_Mapping->setVisible(false);
+    if (tempMenu == ui->menuOptions)
+    {
+        ui->actionGameController_Mapping->setVisible(false);
+    }
 #endif
 }
 
 void MainWindow::saveAppConfig()
 {
-    if (joysticks->count() > 0)
+    if (joysticks->size() > 0)
     {
         JoyTabWidget *temptabwidget = static_cast<JoyTabWidget*>(ui->tabWidget->widget(0));
         settings->setValue("DisplayNames",
@@ -683,6 +801,7 @@ void MainWindow::enableFlashActions()
         {
             JoyButtonWidget *buttonWidget = iter.next();
             buttonWidget->enableFlashes();
+            buttonWidget->tryFlash();
         }
 
         QList<JoyAxisWidget*> list2 = ui->tabWidget->widget(i)->findChildren<JoyAxisWidget*>();
@@ -691,6 +810,7 @@ void MainWindow::enableFlashActions()
         {
             JoyAxisWidget *axisWidget = iter2.next();
             axisWidget->enableFlashes();
+            axisWidget->tryFlash();
         }
 
         QList<JoyControlStickPushButton*> list3 = ui->tabWidget->widget(i)->findChildren<JoyControlStickPushButton*>();
@@ -699,6 +819,7 @@ void MainWindow::enableFlashActions()
         {
             JoyControlStickPushButton *stickWidget = iter3.next();
             stickWidget->enableFlashes();
+            stickWidget->tryFlash();
         }
 
         QList<JoyDPadButtonWidget*> list4 = ui->tabWidget->widget(i)->findChildren<JoyDPadButtonWidget*>();
@@ -707,6 +828,7 @@ void MainWindow::enableFlashActions()
         {
             JoyDPadButtonWidget *dpadWidget = iter4.next();
             dpadWidget->enableFlashes();
+            dpadWidget->tryFlash();
         }
 
         QList<JoyControlStickButtonPushButton*> list6 = ui->tabWidget->widget(i)->findChildren<JoyControlStickButtonPushButton*>();
@@ -715,6 +837,7 @@ void MainWindow::enableFlashActions()
         {
             JoyControlStickButtonPushButton *stickButtonWidget = iter6.next();
             stickButtonWidget->enableFlashes();
+            stickButtonWidget->tryFlash();
         }
 
         QList<DPadPushButton*> list7 = ui->tabWidget->widget(i)->findChildren<DPadPushButton*>();
@@ -723,6 +846,7 @@ void MainWindow::enableFlashActions()
         {
             DPadPushButton *dpadWidget = iter7.next();
             dpadWidget->enableFlashes();
+            dpadWidget->tryFlash();
         }
 
         JoyTabWidget *tabWidget = static_cast<JoyTabWidget*>(ui->tabWidget->widget(i));
@@ -785,57 +909,57 @@ void MainWindow::joystickTrayShow()
 
 void MainWindow::showEvent(QShowEvent *event)
 {
+    bool propogate = true;
+
     // Check if hideEvent has been processed
-    if (signalDisconnect)
+    if (signalDisconnect && isVisible())
     {
         // Restore flashing buttons
         enableFlashActions();
         signalDisconnect = false;
 
         // Only needed if hidden with the system tray enabled
-        if (QSystemTrayIcon::isSystemTrayAvailable() && showTrayIcon)
+        if (showTrayIcon)
         {
-            if (isMaximized())
+            if (isMinimized())
             {
-                showMaximized();
-            }
-            else
-            {
-                showNormal();
-            }
+                if (isMaximized())
+                {
+                    showMaximized();
+                }
+                else
+                {
+                    showNormal();
+                }
 
-            activateWindow();
+                activateWindow();
+                raise();
+            }
         }
     }
 
-    QMainWindow::showEvent(event);
+    if (propogate)
+    {
+        QMainWindow::showEvent(event);
+    }
 }
 
 void MainWindow::changeEvent(QEvent *event)
 {
     if (event->type() == QEvent::WindowStateChange)
     {
-        QWindowStateChangeEvent *e = (QWindowStateChangeEvent*)event;
+        QWindowStateChangeEvent *e = static_cast<QWindowStateChangeEvent*>(event);
         if (e->oldState() != Qt::WindowMinimized && isMinimized())
         {
             bool minimizeToTaskbar = settings->value("MinimizeToTaskbar", false).toBool();
             if (QSystemTrayIcon::isSystemTrayAvailable() && showTrayIcon && !minimizeToTaskbar)
             {
-                hideWindow();
+                this->hideWindow();
             }
             else
             {
                 disableFlashActions();
                 signalDisconnect = true;
-            }
-        }
-        else if (e->oldState() == Qt::WindowMinimized)
-        {
-            if (signalDisconnect)
-            {
-                // Restore flashing buttons
-                enableFlashActions();
-                signalDisconnect = false;
             }
         }
     }
@@ -1093,33 +1217,14 @@ void MainWindow::openMainSettingsDialog()
 }
 
 /**
- * @brief TODO: Implement language switching within the program again?
- * @param Language code.
+ * @brief Change language used by the application.
+ * @param Language code
  */
 void MainWindow::changeLanguage(QString language)
 {
-    if (translator)
+    if (translator && appTranslator)
     {
-        // Remove application specific translation strings
-        qApp->removeTranslator(translator);
-
-        // Remove old Qt translation strings
-        if (appTranslator)
-        {
-            qApp->removeTranslator(appTranslator);
-
-            // Load new Qt translation strings
-            appTranslator->load(QString("qt_").append(language), QLibraryInfo::location(QLibraryInfo::TranslationsPath));
-            qApp->installTranslator(appTranslator);
-        }
-
-        // Load application specific translation strings
-    #if defined(Q_OS_UNIX)
-        translator->load("antimicro_" + language, QApplication::applicationDirPath().append("/../share/antimicro/translations"));
-    #elif defined(Q_OS_WIN)
-        translator->load("antimicro_" + language, QApplication::applicationDirPath().append("\\share\\antimicro\\translations"));
-    #endif
-        qApp->installTranslator(translator);
+        PadderCommon::reloadTranslations(translator, appTranslator, language);
     }
 }
 
@@ -1325,17 +1430,25 @@ void MainWindow::openGameControllerMappingWindow(bool openAsMain)
         if (joystick)
         {
             GameControllerMappingDialog *dialog = new GameControllerMappingDialog(joystick, settings, this);
-            dialog->show();
 
             if (openAsMain)
             {
+                dialog->setParent(0);
+                dialog->setWindowFlags(Qt::Window);
                 connect(dialog, SIGNAL(finished(int)), qApp, SLOT(quit()));
             }
             else
             {
                 connect(dialog, SIGNAL(mappingUpdate(QString,InputDevice*)), this, SLOT(propogateMappingUpdate(QString, InputDevice*)));
             }
+
+            dialog->show();
         }
+    }
+    else if (openAsMain)
+    {
+        Logger::LogInfo(tr("Could not find controller. Exiting."));
+        qApp->quit();
     }
 }
 
@@ -1387,6 +1500,7 @@ void MainWindow::removeJoyTab(SDL_JoystickID deviceID)
             // the tab before deleting tab.
             ui->tabWidget->disableFlashes(tab->getJoystick());
             ui->tabWidget->removeTab(i);
+            QMetaObject::invokeMethod(tab->getJoystick(), "finalRemoval");
             delete tab;
             tab = 0;
             found = true;
@@ -1630,7 +1744,8 @@ void MainWindow::changeWindowStatus()
     if (graphical)
     {
         bool launchInTraySetting = settings->runtimeValue("LaunchInTray", false).toBool();
-        if (!cmdutility->isHiddenRequested() && (!launchInTraySetting || !QSystemTrayIcon::isSystemTrayAvailable()))
+        if (!cmdutility->isHiddenRequested() &&
+            (!launchInTraySetting || !QSystemTrayIcon::isSystemTrayAvailable()))
         {
             show();
         }
@@ -1679,4 +1794,16 @@ QTranslator* MainWindow::getAppTranslator()
 void MainWindow::retranslateUi()
 {
     ui->retranslateUi(this);
+}
+
+void MainWindow::refreshTabHelperThreads()
+{
+    for (int i=0; i < ui->tabWidget->count(); i++)
+    {
+        JoyTabWidget *widget = static_cast<JoyTabWidget*>(ui->tabWidget->widget(i));
+        if (widget)
+        {
+            widget->refreshHelperThread();
+        }
+    }
 }

@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #ifndef JOYTABWIDGET_H
 #define JOYTABWIDGET_H
 
@@ -13,6 +30,8 @@
 #include <QStackedWidget>
 #include <QScrollArea>
 #include <QIcon>
+
+#include "uihelpers/joytabwidgethelper.h"
 
 #include "joystick.h"
 #include "axiseditdialog.h"
@@ -38,6 +57,7 @@ public:
     bool isDisplayingNames();
     bool discardUnsavedProfileChanges();
     void checkHideEmptyOption();
+    void refreshHelperThread();
 
 #ifdef Q_OS_WIN
     void deviceKeyRepeatSettings();
@@ -124,11 +144,11 @@ protected:
     bool hideEmptyButtons;
     QString oldProfileName;
 
+    JoyTabWidgetHelper tabHelper;
+
     static const int DEFAULTNUMBERPROFILES = 5;
 
 signals:
-    void joystickRefreshRequested();
-    void joystickRefreshRequested(InputDevice *joystick);
     void joystickConfigChanged(int index);
     void joystickAxisRefreshLabels(int axisIndex);
     void namesDisplayChanged(bool status);

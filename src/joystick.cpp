@@ -1,10 +1,28 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 
 #include "joystick.h"
 
 const QString Joystick::xmlName = "joystick";
 
-Joystick::Joystick(SDL_Joystick *joyhandle, int deviceIndex, AntiMicroSettings *settings, QObject *parent) :
+Joystick::Joystick(SDL_Joystick *joyhandle, int deviceIndex,
+                   AntiMicroSettings *settings, QObject *parent) :
     InputDevice(deviceIndex, settings, parent)
 {
     this->joyhandle = joyhandle;
@@ -44,12 +62,14 @@ QString Joystick::getSDLName()
 QString Joystick::getGUIDString()
 {
     QString temp;
+
 #ifdef USE_SDL_2
     SDL_JoystickGUID tempGUID = SDL_JoystickGetGUID(joyhandle);
     char guidString[65] = {'0'};
     SDL_JoystickGetGUIDString(tempGUID, guidString, sizeof(guidString));
     temp = QString(guidString);
 #endif
+
     // Not available on SDL 1.2. Return empty string in that case.
     return temp;
 }

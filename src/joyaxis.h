@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #ifndef JOYAXIS_H
 #define JOYAXIS_H
 
@@ -27,7 +44,12 @@ public:
         PositiveHalfThrottle = 2
     };
 
-    void joyEvent(int value, bool ignoresets=false);
+    void joyEvent(int value, bool ignoresets=false, bool updateLastValues=true);
+    void queuePendingEvent(int value, bool ignoresets=false, bool updateLastValues=true);
+    void activatePendingEvent();
+    bool hasPendingEvent();
+    void clearPendingEvent();
+
     bool inDeadZone(int value);
 
     virtual QString getName(bool forceFullFormat=false, bool displayNames=false);
@@ -57,8 +79,7 @@ public:
 
     double getDistanceFromDeadZone();
     double getDistanceFromDeadZone(int value);
-    double calculateNormalizedAxisPlacement();
-    double getAbsoluteAxisPlacement();
+    double getRawDistance(int value);
 
     virtual void readConfig(QXmlStreamReader *xml);
     virtual void writeConfig(QXmlStreamWriter *xml);
@@ -87,9 +108,6 @@ public:
     void setButtonsSensitivity(double value);
     double getButtonsPresetSensitivity();
 
-    void setButtonsSmoothing(bool enabled=false);
-    bool getButtonsPresetSmoothing();
-
     void setButtonsWheelSpeedX(int value);
     void setButtonsWheelSpeedY(int value);
 
@@ -114,6 +132,15 @@ public:
     int getLastKnownRawValue();
     int getProperReleaseValue();
 
+    // Don't use direct assignment but copying from a current axis.
+    void copyRawValues(JoyAxis *srcAxis);
+    void copyThrottledValues(JoyAxis *srcAxis);
+
+    void setExtraAccelerationCurve(JoyButton::JoyExtraAccelerationCurve curve);
+    JoyButton::JoyExtraAccelerationCurve getExtraAccelerationCurve();
+
+    virtual void eventReset();
+
     // Define default values for many properties.
     static const int AXISMIN;
     static const int AXISMAX;
@@ -131,6 +158,7 @@ protected:
     int calculateThrottledValue(int value);
     void setCurrentRawValue(int value);
     void performCalibration(int value);
+    void stickPassEvent(int value, bool ignoresets=false, bool updateLastValues=true);
 
     virtual bool readMainConfig(QXmlStreamReader *xml);
     virtual bool readButtonConfig(QXmlStreamReader *xml);
@@ -155,9 +183,14 @@ protected:
     QString axisName;
     QString defaultAxisName;
     SetJoystick *parentSet;
-    double lastMouseDistance;
     int lastKnownThottledValue;
     int lastKnownRawValue;
+
+    int pendingValue;
+    bool pendingEvent;
+    bool pendingIgnoreSets;
+    // TODO: CHECK IF PROPERTY IS NEEDED.
+    //bool pendingUpdateLastValues;
 
 signals:
     void active(int value);

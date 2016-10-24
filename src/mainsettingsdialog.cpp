@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 #include <QDir>
 #include <QFileDialog>
@@ -10,11 +27,23 @@
 #include <QVariant>
 #include <QMessageBox>
 #include <QDesktopWidget>
+#include <QComboBox>
+#include <QPushButton>
+#include <QLabel>
+#include <QList>
+#include <QListWidget>
+
+#ifdef Q_OS_WIN
+  #include <QSysInfo>
+#endif
 
 #ifdef Q_OS_UNIX
     #if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
-#include <QApplication>
+  #include <QApplication>
     #endif
+
+  #include "eventhandlerfactory.h"
+
 #endif
 
 #include "mainsettingsdialog.h"
@@ -25,17 +54,29 @@
 #include "common.h"
 
 #ifdef Q_OS_WIN
-#include "winextras.h"
+  #include "eventhandlerfactory.h"
+  #include "winextras.h"
+#elif defined(Q_OS_UNIX)
+  #include "x11extras.h"
 #endif
 
-static const QString RUNATSTARTUPKEY("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run");
+static const QString RUNATSTARTUPREGKEY(
+        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run");
+static const QString RUNATSTARTUPLOCATION(
+        QString("%0\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\antimicro.lnk")
+        .arg(QString::fromUtf8(qgetenv("AppData"))));
 
-MainSettingsDialog::MainSettingsDialog(AntiMicroSettings *settings, QList<InputDevice *> *devices, QWidget *parent) :
+MainSettingsDialog::MainSettingsDialog(AntiMicroSettings *settings,
+                                       QList<InputDevice *> *devices,
+                                       QWidget *parent) :
     QDialog(parent, Qt::Dialog),
     ui(new Ui::MainSettingsDialog)
 {
     ui->setupUi(this);
     setAttribute(Qt::WA_DeleteOnClose);
+
+    ui->profileOpenDirPushButton->setIcon(QIcon::fromTheme("document-open-folder",
+                                                           QIcon(":/icons/16x16/actions/document-open-folder.png")));
 
     this->settings = settings;
     this->allDefaultProfile = 0;
@@ -44,6 +85,8 @@ MainSettingsDialog::MainSettingsDialog(AntiMicroSettings *settings, QList<InputD
 #ifdef USE_SDL_2
     fillControllerMappingsTable();
 #endif
+
+    settings->getLock()->lock();
 
     QString defaultProfileDir = settings->value("DefaultProfileDir", "").toString();
     int numberRecentProfiles = settings->value("NumberRecentProfiles", 5).toInt();
@@ -64,11 +107,6 @@ MainSettingsDialog::MainSettingsDialog(AntiMicroSettings *settings, QList<InputD
     {
         ui->closeToTrayCheckBox->setChecked(true);
     }
-
-    findLocaleItem();
-
-    //delete ui->categoriesListWidget->item(2);
-    //ui->stackedWidget->removeWidget(ui->page);
 
     changePresetLanguage();
 
@@ -120,31 +158,54 @@ MainSettingsDialog::MainSettingsDialog(AntiMicroSettings *settings, QList<InputD
     }
 
 #ifdef Q_OS_WIN
-    QSettings autoRunReg(RUNATSTARTUPKEY, QSettings::NativeFormat);
-    QString autoRunEntry = autoRunReg.value("antimicro", "").toString();
-    if (!autoRunEntry.isEmpty())
+    BaseEventHandler *handler = EventHandlerFactory::getInstance()->handler();
+
+    if (QSysInfo::windowsVersion() >= QSysInfo::WV_VISTA)
     {
-        ui->launchAtWinStartupCheckBox->setChecked(true);
+        // Handle Windows Vista and later
+        QFile tempFile(RUNATSTARTUPLOCATION);
+        if (tempFile.exists())
+        {
+            ui->launchAtWinStartupCheckBox->setChecked(true);
+        }
+    }
+    else
+    {
+        // Handle Windows XP
+        QSettings autoRunReg(RUNATSTARTUPREGKEY, QSettings::NativeFormat);
+        QString autoRunEntry = autoRunReg.value("antimicro", "").toString();
+        if (!autoRunEntry.isEmpty())
+        {
+            ui->launchAtWinStartupCheckBox->setChecked(true);
+        }
     }
 
-    bool keyRepeatEnabled = settings->value("KeyRepeat/KeyRepeatEnabled", true).toBool();
-    if (keyRepeatEnabled)
+    if (handler && handler->getIdentifier() == "sendinput")
     {
-        ui->keyRepeatEnableCheckBox->setChecked(true);
-        ui->keyDelayHorizontalSlider->setEnabled(true);
-        ui->keyDelaySpinBox->setEnabled(true);
-        ui->keyRateHorizontalSlider->setEnabled(true);
-        ui->keyRateSpinBox->setEnabled(true);
+        bool keyRepeatEnabled = settings->value("KeyRepeat/KeyRepeatEnabled", true).toBool();
+        if (keyRepeatEnabled)
+        {
+            ui->keyRepeatEnableCheckBox->setChecked(true);
+            ui->keyDelayHorizontalSlider->setEnabled(true);
+            ui->keyDelaySpinBox->setEnabled(true);
+            ui->keyRateHorizontalSlider->setEnabled(true);
+            ui->keyRateSpinBox->setEnabled(true);
+        }
+
+        int keyRepeatDelay = settings->value("KeyRepeat/KeyRepeatDelay", InputDevice::DEFAULTKEYREPEATDELAY).toInt();
+        int keyRepeatRate = settings->value("KeyRepeat/KeyRepeatRate", InputDevice::DEFAULTKEYREPEATRATE).toInt();
+
+        ui->keyDelayHorizontalSlider->setValue(keyRepeatDelay);
+        ui->keyDelaySpinBox->setValue(keyRepeatDelay);
+
+        ui->keyRateHorizontalSlider->setValue(1000/keyRepeatRate);
+        ui->keyRateSpinBox->setValue(1000/keyRepeatRate);
     }
-
-    int keyRepeatDelay = settings->value("KeyRepeat/KeyRepeatDelay", InputDevice::DEFAULTKEYREPEATDELAY).toInt();
-    int keyRepeatRate = settings->value("KeyRepeat/KeyRepeatRate", InputDevice::DEFAULTKEYREPEATRATE).toInt();
-
-    ui->keyDelayHorizontalSlider->setValue(keyRepeatDelay);
-    ui->keyDelaySpinBox->setValue(keyRepeatDelay);
-
-    ui->keyRateHorizontalSlider->setValue(1000/keyRepeatRate);
-    ui->keyRateSpinBox->setValue(1000/keyRepeatRate);
+    else
+    {
+        //ui->launchAtWinStartupCheckBox->setVisible(false);
+        ui->keyRepeatGroupBox->setVisible(false);
+    }
 
 #else
     ui->launchAtWinStartupCheckBox->setVisible(false);
@@ -251,7 +312,36 @@ MainSettingsDialog::MainSettingsDialog(AntiMicroSettings *settings, QList<InputD
 #endif
 
     fillSpringScreenPresets();
-    //ui->springGroupBox->setVisible(false);
+
+    for (int i=1; i <= 16; i++)
+    {
+        ui->gamepadPollRateComboBox->addItem(QString("%1 ms").arg(i), QVariant(i));
+    }
+
+    int gamepadPollIndex = ui->gamepadPollRateComboBox->findData(JoyButton::getGamepadRefreshRate());
+    if (gamepadPollIndex >= 0)
+    {
+        ui->gamepadPollRateComboBox->setCurrentIndex(gamepadPollIndex);
+    }
+
+#ifdef Q_OS_UNIX
+    #if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+    if (QApplication::platformName() == QStringLiteral("xcb"))
+    {
+    #endif
+        refreshExtraMouseInfo();
+    #if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+    }
+    else
+    {
+        ui->extraInfoFrame->hide();
+    }
+    #endif
+#else
+    ui->extraInfoFrame->hide();
+#endif
+
+    settings->getLock()->unlock();
 
     connect(ui->categoriesListWidget, SIGNAL(currentRowChanged(int)), ui->stackedWidget, SLOT(setCurrentIndex(int)));
     connect(ui->controllerMappingsTableWidget, SIGNAL(itemChanged(QTableWidgetItem*)), this, SLOT(mappingsTableItemChanged(QTableWidgetItem*)));
@@ -277,6 +367,7 @@ MainSettingsDialog::MainSettingsDialog(AntiMicroSettings *settings, QList<InputD
     connect(ui->keyRateSpinBox, SIGNAL(valueChanged(int)), ui->keyRateHorizontalSlider, SLOT(setValue(int)));
 
     connect(ui->smoothingEnableCheckBox, SIGNAL(toggled(bool)), this, SLOT(checkSmoothingWidgetStatus(bool)));
+    connect(ui->resetAccelPushButton, SIGNAL(clicked(bool)), this, SLOT(resetMouseAcceleration()));
 }
 
 MainSettingsDialog::~MainSettingsDialog()
@@ -306,6 +397,7 @@ void MainSettingsDialog::fillControllerMappingsTable()
 
     QHash<QString, QList<QVariant> > tempHash;
 
+    settings->getLock()->lock();
     settings->beginGroup("Mappings");
 
     QStringList mappings = settings->allKeys();
@@ -345,6 +437,7 @@ void MainSettingsDialog::fillControllerMappingsTable()
     }
 
     settings->endGroup();
+    settings->getLock()->unlock();
 
     QHashIterator<QString, QList<QVariant> > iter2(tempHash);
     int i = 0;
@@ -437,6 +530,8 @@ void MainSettingsDialog::deleteMappingRow()
 
 void MainSettingsDialog::syncMappingSettings()
 {
+    settings->getLock()->lock();
+
     settings->beginGroup("Mappings");
     settings->remove("");
 
@@ -459,6 +554,7 @@ void MainSettingsDialog::syncMappingSettings()
     }
 
     settings->endGroup();
+    settings->getLock()->unlock();
 }
 
 void MainSettingsDialog::saveNewSettings()
@@ -467,6 +563,7 @@ void MainSettingsDialog::saveNewSettings()
     syncMappingSettings();
 #endif
 
+    settings->getLock()->lock();
     QString oldProfileDir = settings->value("DefaultProfileDir", "").toString();
     QString possibleProfileDir = ui->profileDefaultDirLineEdit->text();
     bool closeToTray = ui->closeToTrayCheckBox->isChecked();
@@ -494,6 +591,7 @@ void MainSettingsDialog::saveNewSettings()
     {
         settings->remove("CloseToTray");
     }
+    settings->getLock()->unlock();
 
     checkLocaleChange();
 #ifdef Q_OS_UNIX
@@ -511,23 +609,51 @@ void MainSettingsDialog::saveNewSettings()
     saveAutoProfileSettings();
 #endif
 
+    settings->getLock()->lock();
 #ifdef Q_OS_WIN
-    QSettings autoRunReg(RUNATSTARTUPKEY, QSettings::NativeFormat);
-    QString autoRunEntry = autoRunReg.value("antimicro", "").toString();
-
-    if (ui->launchAtWinStartupCheckBox->isChecked())
+    if (QSysInfo::windowsVersion() >= QSysInfo::WV_VISTA)
     {
-        QString nativeFilePath = QDir::toNativeSeparators(qApp->applicationFilePath());
-        autoRunReg.setValue("antimicro", nativeFilePath);
+        // Handle Windows Vista and later
+        QFile tempFile(RUNATSTARTUPLOCATION);
+
+        if (ui->launchAtWinStartupCheckBox->isChecked() && !tempFile.exists())
+        {
+            if (tempFile.open(QFile::WriteOnly))
+            {
+                QFile currentAppLocation(qApp->applicationFilePath());
+                currentAppLocation.link(QFileInfo(tempFile).absoluteFilePath());
+            }
+        }
+        else if (tempFile.exists() && QFileInfo(tempFile).isWritable())
+        {
+            tempFile.remove();
+        }
     }
-    else if (!autoRunEntry.isEmpty())
+    else
     {
-        autoRunReg.remove("antimicro");
+        // Handle Windows XP
+        QSettings autoRunReg(RUNATSTARTUPREGKEY, QSettings::NativeFormat);
+        QString autoRunEntry = autoRunReg.value("antimicro", "").toString();
+
+        if (ui->launchAtWinStartupCheckBox->isChecked())
+        {
+            QString nativeFilePath = QDir::toNativeSeparators(qApp->applicationFilePath());
+            autoRunReg.setValue("antimicro", nativeFilePath);
+        }
+        else if (!autoRunEntry.isEmpty())
+        {
+            autoRunReg.remove("antimicro");
+        }
     }
 
-    settings->setValue("KeyRepeat/KeyRepeatEnabled", ui->keyRepeatEnableCheckBox->isChecked() ? "1" : "0");
-    settings->setValue("KeyRepeat/KeyRepeatDelay", ui->keyDelaySpinBox->value());
-    settings->setValue("KeyRepeat/KeyRepeatRate", 1000/ui->keyRateSpinBox->value());
+    BaseEventHandler *handler = EventHandlerFactory::getInstance()->handler();
+
+    if (handler && handler->getIdentifier() == "sendinput")
+    {
+        settings->setValue("KeyRepeat/KeyRepeatEnabled", ui->keyRepeatEnableCheckBox->isChecked() ? "1" : "0");
+        settings->setValue("KeyRepeat/KeyRepeatDelay", ui->keyDelaySpinBox->value());
+        settings->setValue("KeyRepeat/KeyRepeatRate", 1000/ui->keyRateSpinBox->value());
+    }
 
 #endif
 
@@ -585,6 +711,15 @@ void MainSettingsDialog::saveNewSettings()
 
 #endif
 
+    PadderCommon::lockInputDevices();
+
+    if (connectedDevices->size() > 0)
+    {
+        InputDevice *tempDevice = connectedDevices->at(0);
+        QMetaObject::invokeMethod(tempDevice, "haltServices", Qt::BlockingQueuedConnection);
+    }
+
+
     bool smoothingEnabled = ui->smoothingEnableCheckBox->isChecked();
     int historySize = ui->historySizeSpinBox->value();
     double weightModifier = ui->weightModifierDoubleSpinBox->value();
@@ -631,7 +766,18 @@ void MainSettingsDialog::saveNewSettings()
     JoyButton::setSpringModeScreen(springScreen);
     settings->setValue("Mouse/SpringScreen", QString::number(springScreen));
 
+    int pollIndex = ui->gamepadPollRateComboBox->currentIndex();
+    unsigned int gamepadPollRate = ui->gamepadPollRateComboBox->itemData(pollIndex).toUInt();
+    if (gamepadPollRate != JoyButton::getGamepadRefreshRate())
+    {
+        JoyButton::setGamepadRefreshRate(gamepadPollRate);
+        settings->setValue("GamepadPollRate", QString::number(gamepadPollRate));
+    }
+
+    PadderCommon::unlockInputDevices();
+
     settings->sync();
+    settings->getLock()->unlock();
 }
 
 void MainSettingsDialog::selectDefaultProfileDir()
@@ -646,6 +792,7 @@ void MainSettingsDialog::selectDefaultProfileDir()
 
 void MainSettingsDialog::checkLocaleChange()
 {
+    settings->getLock()->lock();
     int row = ui->localeListWidget->currentRow();
     if (row == 0)
     {
@@ -654,6 +801,7 @@ void MainSettingsDialog::checkLocaleChange()
             settings->remove("Language");
         }
 
+        settings->getLock()->unlock();
         emit changeLanguage(QLocale::system().name());
     }
     else
@@ -677,39 +825,37 @@ void MainSettingsDialog::checkLocaleChange()
         }
         else if (row == 5)
         {
-            newLocale = "ru";
+            newLocale = "it";
         }
         else if (row == 6)
         {
-            newLocale = "sr";
+            newLocale = "ja";
         }
         else if (row == 7)
+        {
+            newLocale = "ru";
+        }
+        else if (row == 8)
+        {
+            newLocale = "sr";
+        }
+        else if (row == 9)
+        {
+            newLocale = "zh_CN";
+        }
+        else if (row == 10)
+        {
+            newLocale = "es";
+        }
+        else if (row == 11)
         {
             newLocale = "uk";
         }
 
         settings->setValue("Language", newLocale);
 
+        settings->getLock()->unlock();
         emit changeLanguage(newLocale);
-    }
-}
-
-void MainSettingsDialog::findLocaleItem()
-{
-    QLocale::Language currentLocale = QLocale().language();
-    QLocale::Language systemLocale = QLocale::system().language();
-
-    if (currentLocale == systemLocale)
-    {
-        ui->localeListWidget->setCurrentRow(0);
-    }
-    else if (currentLocale == QLocale::English)
-    {
-        ui->localeListWidget->setCurrentRow(1);
-    }
-    else if (currentLocale == QLocale::Portuguese)
-    {
-        ui->localeListWidget->setCurrentRow(2);
     }
 }
 
@@ -1058,7 +1204,7 @@ void MainSettingsDialog::changeDeviceForProfileTable(int index)
 
 void MainSettingsDialog::saveAutoProfileSettings()
 {
-
+    settings->getLock()->lock();
     settings->beginGroup("DefaultAutoProfiles");
     QStringList defaultkeys = settings->allKeys();
     settings->endGroup();
@@ -1147,6 +1293,7 @@ void MainSettingsDialog::saveAutoProfileSettings()
         i++;
     }
     settings->endGroup();
+    settings->getLock()->unlock();
 }
 
 void MainSettingsDialog::fillAllAutoProfilesTable()
@@ -1662,7 +1809,7 @@ void MainSettingsDialog::addNewAutoProfile()
     {
         if (info->isCurrentDefault())
         {
-            if (!info->getGUID().isEmpty() && !info->getProfileLocation().isEmpty())
+            if (!info->getGUID().isEmpty() && !info->getExe().isEmpty())
             {
                 defaultAutoProfiles.insert(info->getGUID(), info);
                 defaultList.append(info);
@@ -1671,7 +1818,7 @@ void MainSettingsDialog::addNewAutoProfile()
         else
         {
             if (!info->getGUID().isEmpty() &&
-                !info->getProfileLocation().isEmpty())
+                !info->getExe().isEmpty())
             {
                 //QList<AutoProfileInfo*> templist;
                 //templist.append(info);
@@ -1754,18 +1901,42 @@ void MainSettingsDialog::changePresetLanguage()
         {
             ui->localeListWidget->setCurrentRow(4);
         }
-        else if (targetLang == "ru")
+        else if (targetLang == "it")
         {
             ui->localeListWidget->setCurrentRow(5);
         }
-        else if (targetLang == "sr")
+        else if (targetLang == "ja")
         {
             ui->localeListWidget->setCurrentRow(6);
         }
-        else if (targetLang == "uk")
+        else if (targetLang == "ru")
         {
             ui->localeListWidget->setCurrentRow(7);
         }
+        else if (targetLang == "sr")
+        {
+            ui->localeListWidget->setCurrentRow(8);
+        }
+        else if (targetLang == "zh_CN")
+        {
+            ui->localeListWidget->setCurrentRow(9);
+        }
+        else if (targetLang == "es")
+        {
+            ui->localeListWidget->setCurrentRow(10);
+        }
+        else if (targetLang == "uk")
+        {
+            ui->localeListWidget->setCurrentRow(11);
+        }
+        else
+        {
+            ui->localeListWidget->setCurrentRow(0);
+        }
+    }
+    else
+    {
+        ui->localeListWidget->setCurrentRow(0);
     }
 }
 
@@ -1786,4 +1957,50 @@ void MainSettingsDialog::fillSpringScreenPresets()
     {
         ui->springScreenComboBox->setCurrentIndex(screenIndex);
     }
+}
+
+void MainSettingsDialog::refreshExtraMouseInfo()
+{
+#if defined(Q_OS_UNIX) && defined(WITH_X11)
+    QString handler = EventHandlerFactory::getInstance()->handler()->getIdentifier();
+    #if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+    if (QApplication::platformName() == QStringLiteral("xcb"))
+    {
+    #endif
+        struct X11Extras::ptrInformation temp;
+        if (handler == "uinput")
+        {
+            temp = X11Extras::getInstance()->getPointInformation();
+        }
+        else if (handler == "xtest")
+        {
+            temp = X11Extras::getInstance()->getPointInformation(X11Extras::xtestMouseDeviceName);
+        }
+
+        if (temp.id >= 0)
+        {
+            ui->accelNumLabel->setText(QString::number(temp.accelNum));
+            ui->accelDenomLabel->setText(QString::number(temp.accelDenom));
+            ui->accelThresLabel->setText(QString::number(temp.threshold));
+        }
+
+    #if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+    }
+    #endif
+#endif
+}
+
+void MainSettingsDialog::resetMouseAcceleration()
+{
+#if defined(Q_OS_UNIX) && defined(WITH_X11)
+  #if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+    if (QApplication::platformName() == QStringLiteral("xcb"))
+    {
+  #endif
+    X11Extras::getInstance()->x11ResetMouseAccelerationChange();
+    refreshExtraMouseInfo();
+  #if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+    }
+  #endif
+#endif
 }

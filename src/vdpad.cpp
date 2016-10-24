@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "vdpad.h"
 
 const QString VDPad::xmlName = "vdpad";
@@ -98,7 +115,7 @@ void VDPad::joyEvent(bool pressed, bool ignoresets)
 {
     Q_UNUSED(pressed);
 
-    int tempDirection = (int)JoyDPadButton::DpadCentered;
+    int tempDirection = static_cast<int>(JoyDPadButton::DpadCentered);
 
     /*
      * Check which buttons are currently active
@@ -265,7 +282,18 @@ void VDPad::queueJoyEvent(bool ignoresets)
 
 void VDPad::activatePendingEvent()
 {
-    // Always use true. The proper direction value will be determined
-    // in the joyEvent method.
-    joyEvent(true);
+    if (pendingVDPadEvent)
+    {
+        // Always use true. The proper direction value will be determined
+        // in the joyEvent method.
+        joyEvent(true);
+
+        pendingVDPadEvent = false;
+    }
+
+}
+
+void VDPad::clearPendingEvent()
+{
+    pendingVDPadEvent = false;
 }

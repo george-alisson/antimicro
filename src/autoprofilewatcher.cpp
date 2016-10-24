@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 #include <QListIterator>
 #include <QStringListIterator>
@@ -155,9 +172,13 @@ void AutoProfileWatcher::runAppCheck()
                 numProps += !info->getWindowName().isEmpty() ? 1 : 0;
 
                 int numMatched = 0;
-                numMatched += info->getExe() == appLocation ? 1 : 0;
-                numMatched += info->getWindowClass() == nowWindowClass ? 1 : 0;
-                numMatched += info->getWindowName() == nowWindowName ? 1 : 0;
+                numMatched += (!info->getExe().isEmpty() &&
+                               (info->getExe() == appLocation ||
+                                info->getExe() == baseAppFileName)) ? 1 : 0;
+                numMatched += (!info->getWindowClass().isEmpty() &&
+                               info->getWindowClass() == nowWindowClass) ? 1 : 0;
+                numMatched += (!info->getWindowName().isEmpty() &&
+                               info->getWindowName() == nowWindowName) ? 1 : 0;
 
                 if (numProps == numMatched)
                 {
@@ -221,6 +242,7 @@ void AutoProfileWatcher::syncProfileAssignment()
     //QStringList assignments = settings->allKeys();
     //QStringListIterator iter(assignments);
 
+    settings->getLock()->lock();
     settings->beginGroup("DefaultAutoProfiles");
     QString exe;
     QString guid;
@@ -353,6 +375,7 @@ void AutoProfileWatcher::syncProfileAssignment()
     }
 
     settings->endGroup();
+    settings->getLock()->unlock();
 }
 
 void AutoProfileWatcher::clearProfileAssignments()

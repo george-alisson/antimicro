@@ -1,3 +1,20 @@
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 //#include <QDebug>
 #include <QList>
 
@@ -7,6 +24,7 @@
 JoyButtonMouseHelper::JoyButtonMouseHelper(QObject *parent) :
     QObject(parent)
 {
+    firstSpringEvent = false;
 }
 
 /**
@@ -14,8 +32,6 @@ JoyButtonMouseHelper::JoyButtonMouseHelper(QObject *parent) :
  */
 void JoyButtonMouseHelper::moveMouseCursor()
 {
-    //qDebug() << QTime::currentTime();
-
     int finalx = 0;
     int finaly = 0;
     int elapsedTime = 5;
@@ -46,12 +62,8 @@ void JoyButtonMouseHelper::moveSpringMouse()
  */
 void JoyButtonMouseHelper::mouseEvent()
 {
-    //qDebug() << "ENTER";
-
     if (!JoyButton::hasCursorEvents() && !JoyButton::hasSpringEvents())
     {
-        //qDebug() << "GO THROUGH LIST";
-
         QList<JoyButton*> *buttonList = JoyButton::getPendingMouseButtons();
         QListIterator<JoyButton*> iter(*buttonList);
         while (iter.hasNext())
@@ -61,28 +73,49 @@ void JoyButtonMouseHelper::mouseEvent()
         }
     }
 
-    //if (JoyButton::hasCursorEvents())
-    //{
-        //qDebug() << "CURSOR EVENT: ";
-        moveMouseCursor();
-    //}
+    moveMouseCursor();
 
     if (JoyButton::hasSpringEvents())
     {
         moveSpringMouse();
     }
+
+    JoyButton::restartLastMouseTime();
+    firstSpringEvent = false;
 }
 
 void JoyButtonMouseHelper::resetButtonMouseDistances()
 {
-    if (!JoyButton::hasCursorEvents())
+    QList<JoyButton*> *buttonList = JoyButton::getPendingMouseButtons();
+    QListIterator<JoyButton*> iter(*buttonList);
+    while (iter.hasNext())
     {
-        QList<JoyButton*> *buttonList = JoyButton::getPendingMouseButtons();
-        QListIterator<JoyButton*> iter(*buttonList);
-        while (iter.hasNext())
-        {
-            JoyButton *temp = iter.next();
-            temp->resetMouseDistances();
-        }
+        JoyButton *temp = iter.next();
+        temp->resetAccelerationDistances();
     }
+}
+
+void JoyButtonMouseHelper::setFirstSpringStatus(bool status)
+{
+    firstSpringEvent = status;
+}
+
+bool JoyButtonMouseHelper::getFirstSpringStatus()
+{
+    return firstSpringEvent;
+}
+
+void JoyButtonMouseHelper::carryGamePollRateUpdate(unsigned int pollRate)
+{
+    emit gamepadRefreshRateUpdated(pollRate);
+}
+
+void JoyButtonMouseHelper::carryMouseRefreshRateUpdate(unsigned int refreshRate)
+{
+    emit mouseRefreshRateUpdated(refreshRate);
+}
+
+void JoyButtonMouseHelper::changeThread(QThread *thread)
+{
+    JoyButton::setStaticMouseThread(thread);
 }

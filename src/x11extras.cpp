@@ -1,17 +1,49 @@
-#include <unistd.h>
-#include <QFileInfo>
+/* antimicro Gamepad to KB+M event mapper
+ * Copyright (C) 2015 Travis Nickles <nickles.travis@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include <unistd.h>
 //#include <QDebug>
-#include "x11extras.h"
+#include <QFileInfo>
+#include <QThreadStorage>
+
+#include "common.h"
 
 #include <X11/Xatom.h>
+#include <X11/XKBlib.h>
+#include <X11/extensions/XInput.h>
+#include <X11/extensions/XInput2.h>
+
+#include "x11extras.h"
+
+const QString X11Extras::mouseDeviceName = PadderCommon::mouseDeviceName;
+const QString X11Extras::keyboardDeviceName = PadderCommon::keyboardDeviceName;
+const QString X11Extras::xtestMouseDeviceName = QString("Virtual core XTEST pointer");
+
+QString X11Extras::_customDisplayString = QString("");
+
+static QThreadStorage<X11Extras*> displays;
 
 X11Extras* X11Extras::_instance = 0;
 
 X11Extras::X11Extras(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    knownAliases()
 {
-    knownAliases = QHash<QString, QString> ();
+    //knownAliases = QHash<QString, QString> ();
     _display = XOpenDisplay(NULL);
     populateKnownAliases();
 }
@@ -25,26 +57,46 @@ X11Extras::~X11Extras()
     {
         XCloseDisplay(display());
         _display = 0;
-        _customDisplayString = "";
+        //_customDisplayString = "";
     }
 }
 
 X11Extras *X11Extras::getInstance()
 {
-    if (!_instance)
+    /*if (!_instance)
     {
         _instance = new X11Extras();
     }
 
     return _instance;
+    */
+    X11Extras *temp = 0;
+    if (!displays.hasLocalData())
+    {
+        temp = new X11Extras();
+        displays.setLocalData(temp);
+    }
+    else
+    {
+        temp = displays.localData();
+    }
+
+    return temp;
 }
 
 void X11Extras::deleteInstance()
 {
-    if (_instance)
+    /*if (_instance)
     {
         delete _instance;
         _instance = 0;
+    }
+    */
+    if (displays.hasLocalData())
+    {
+        X11Extras *temp = displays.localData();
+        delete temp;
+        displays.setLocalData(0);
     }
 }
 
@@ -72,7 +124,7 @@ void X11Extras::closeDisplay()
     {
         XCloseDisplay(display());
         _display = 0;
-        _customDisplayString = "";
+        //_customDisplayString = "";
     }
 }
 
@@ -82,7 +134,7 @@ void X11Extras::closeDisplay()
 void X11Extras::syncDisplay()
 {
     _display = XOpenDisplay(NULL);
-    _customDisplayString = "";
+    //_customDisplayString = "";
 }
 
 /**
@@ -94,7 +146,7 @@ void X11Extras::syncDisplay(QString displayString)
 {
     QByteArray tempByteArray = displayString.toLocal8Bit();
     _display = XOpenDisplay(tempByteArray.constData());
-    if (_display)
+    /*if (_display)
     {
         _customDisplayString = displayString;
     }
@@ -102,6 +154,12 @@ void X11Extras::syncDisplay(QString displayString)
     {
         _customDisplayString = "";
     }
+    */
+}
+
+void X11Extras::setCustomDisplay(QString displayString)
+{
+    _customDisplayString = displayString;
 }
 
 /**
@@ -581,4 +639,226 @@ unsigned long X11Extras::getWindowInFocus()
 QString X11Extras::getXDisplayString()
 {
     return _customDisplayString;
+}
+
+unsigned int X11Extras::getGroup1KeySym(unsigned int virtualkey)
+{
+    unsigned int result = 0;
+    Display *display = this->display();
+
+    unsigned int temp = XKeysymToKeycode(display, virtualkey);
+    result = XkbKeycodeToKeysym(display, temp, 0, 0);
+
+    return result;
+}
+
+void X11Extras::x11ResetMouseAccelerationChange(QString pointerName)
+ {
+    int xi_opcode, event, error;
+    xi_opcode = event = error = 0;
+    Display *display = this->display();
+
+    bool result = XQueryExtension(display, "XInputExtension", &xi_opcode, &event, &error);
+    if (!result)
+    {
+        Logger::LogInfo(tr("xinput extension was not found. No mouse acceleration changes will occur."));
+    }
+    else
+    {
+        int ximajor = 2, ximinor = 0;
+        if (XIQueryVersion(display, &ximajor, &ximinor) != Success)
+        {
+            Logger::LogInfo(tr("xinput version must be at least 2.0. No mouse acceleration changes will occur."));
+            result = false;
+        }
+    }
+
+    if (result)
+    {
+        XIDeviceInfo *all_devices = 0;
+        XIDeviceInfo *current_devices = 0;
+        XIDeviceInfo *mouse_device = 0;
+
+        int num_devices = 0;
+        all_devices = XIQueryDevice(display, XIAllDevices, &num_devices);
+        for (int i=0; i < num_devices; i++)
+        {
+            current_devices = &all_devices[i];
+            if (current_devices->use == XISlavePointer &&
+                QString::fromUtf8(current_devices->name) == pointerName)
+            {
+                Logger::LogInfo(tr("Virtual pointer found with id=%1.").arg(current_devices->deviceid));
+                mouse_device = current_devices;
+            }
+        }
+
+        if (mouse_device)
+        {
+            XDevice *device = XOpenDevice(display, mouse_device->deviceid);
+
+            int num_feedbacks = 0;
+            int feedback_id = -1;
+            XFeedbackState *feedbacks = XGetFeedbackControl(display, device, &num_feedbacks);
+            XFeedbackState *temp = feedbacks;
+            for (int i=0; (i < num_feedbacks) && (feedback_id == -1); i++)
+            {
+                if (temp->c_class == PtrFeedbackClass)
+                {
+                    feedback_id = temp->id;
+                }
+
+                if (i+1 < num_feedbacks)
+                {
+                    temp = (XFeedbackState*) ((char*) temp + temp->length);
+                }
+            }
+
+            XFree(feedbacks);
+            feedbacks = temp = 0;
+
+            if (feedback_id <= -1)
+            {
+                Logger::LogInfo(tr("PtrFeedbackClass was not found for virtual pointer."
+                                   "No change to mouse acceleration will occur for device with id=%1").arg(device->device_id));
+
+                result = false;
+            }
+            else
+            {
+                Logger::LogInfo(tr("Changing mouse acceleration for device with id=%1").arg(device->device_id));
+
+                XPtrFeedbackControl	feedback;
+                feedback.c_class = PtrFeedbackClass;
+                feedback.length = sizeof(XPtrFeedbackControl);
+                feedback.id = feedback_id;
+                feedback.threshold = 0;
+                feedback.accelNum = 1;
+                feedback.accelDenom = 1;
+
+                XChangeFeedbackControl(display, device, DvAccelNum|DvAccelDenom|DvThreshold,
+                           (XFeedbackControl*) &feedback);
+
+                XSync(display, false);
+            }
+
+            XCloseDevice(display, device);
+        }
+
+        if (all_devices)
+        {
+            XIFreeDeviceInfo(all_devices);
+        }
+     }
+ }
+
+void X11Extras::x11ResetMouseAccelerationChange()
+{
+    x11ResetMouseAccelerationChange(mouseDeviceName);
+}
+
+struct X11Extras::ptrInformation X11Extras::getPointInformation(QString pointerName)
+{
+    struct ptrInformation tempInfo;
+
+    int xi_opcode, event, error;
+    xi_opcode = event = error = 0;
+    Display *display = this->display();
+
+    bool result = XQueryExtension(display, "XInputExtension", &xi_opcode, &event, &error);
+    if (result)
+    {
+        int ximajor = 2, ximinor = 0;
+        if (XIQueryVersion(display, &ximajor, &ximinor) != Success)
+        {
+            Logger::LogInfo(tr("xinput version must be at least 2.0. No mouse acceleration changes will occur."));
+            result = false;
+        }
+    }
+
+    if (result)
+    {
+        XIDeviceInfo *all_devices = 0;
+        XIDeviceInfo *current_devices = 0;
+        XIDeviceInfo *mouse_device = 0;
+
+        int num_devices = 0;
+        all_devices = XIQueryDevice(display, XIAllDevices, &num_devices);
+        for (int i=0; i < num_devices; i++)
+        {
+            current_devices = &all_devices[i];
+            if (current_devices->use == XISlavePointer &&
+                QString::fromUtf8(current_devices->name) == pointerName)
+            {
+                mouse_device = current_devices;
+            }
+        }
+
+        if (mouse_device)
+        {
+            XDevice *device = XOpenDevice(display, mouse_device->deviceid);
+
+            int num_feedbacks = 0;
+            int feedback_id = -1;
+            XFeedbackState *feedbacks = XGetFeedbackControl(display, device, &num_feedbacks);
+            XFeedbackState *temp = feedbacks;
+            for (int i=0; (i < num_feedbacks) && (feedback_id == -1); i++)
+            {
+                if (temp->c_class == PtrFeedbackClass)
+                {
+                    feedback_id = temp->id;
+                }
+
+                if (feedback_id == -1 && (i+1 < num_feedbacks))
+                {
+                    temp = (XFeedbackState*) ((char*) temp + temp->length);
+                }
+            }
+
+            if (feedback_id <= -1)
+            {
+                result = false;
+            }
+            else
+            {
+                XPtrFeedbackState *tempPtrFeedback = reinterpret_cast<XPtrFeedbackState*>(temp);
+                tempInfo.id = feedback_id;
+                tempInfo.accelNum = tempPtrFeedback->accelNum;
+                tempInfo.accelDenom = tempPtrFeedback->accelDenom;
+                tempInfo.threshold = tempPtrFeedback->threshold;
+            }
+
+            XFree(feedbacks);
+            feedbacks = temp = 0;
+            XCloseDevice(display, device);
+        }
+
+        if (all_devices)
+        {
+            XIFreeDeviceInfo(all_devices);
+        }
+    }
+
+    return tempInfo;
+}
+
+struct X11Extras::ptrInformation X11Extras::getPointInformation()
+{
+    return getPointInformation(mouseDeviceName);
+}
+
+QPoint X11Extras::getPos()
+{
+    XEvent mouseEvent;
+    Window wid = DefaultRootWindow(display());
+    XWindowAttributes xwAttr;
+
+    XQueryPointer(display(), wid,
+                  &mouseEvent.xbutton.root, &mouseEvent.xbutton.window,
+                  &mouseEvent.xbutton.x_root, &mouseEvent.xbutton.y_root,
+                  &mouseEvent.xbutton.x, &mouseEvent.xbutton.y,
+                  &mouseEvent.xbutton.state);
+
+    XGetWindowAttributes(display(), wid, &xwAttr);
+    QPoint currentPoint(mouseEvent.xbutton.x_root, mouseEvent.xbutton.y_root);
+    return currentPoint;
 }
